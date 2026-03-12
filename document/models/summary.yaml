@@ -1,0 +1,135 @@
+---
+metadata:
+  feature: summary
+  description: Summary models - Summary entity, summary DTOs, and mapper
+  source_files:
+    entity: src/main/kotlin/com/example/lib4gz/courses/model/entity/Courses.kt
+    payload: src/main/kotlin/com/example/lib4gz/courses/model/payload/SummaryPayload.kt
+    mapper: src/main/kotlin/com/example/lib4gz/courses/model/mapper/CourseMapper.kt
+
+entity:
+  Summary:
+    package: com.example.lib4gz.courses.model.entity
+    file: Courses.kt
+    table: summaries
+    notes:
+      - "Shared entity file with Course, Enrollment, Module, Lesson"
+      - "NOT soft-deleted (no @SQLDelete or @Where)"
+      - "1:1 relationship with Lesson"
+      - "Versioned - version increments on each update"
+    annotations:
+      - "@Entity"
+      - "@Table(name = \"summaries\")"
+    fields:
+      id:
+        type: String
+        mutability: val
+        default: "IdGenerator.generate(\"sum\")"
+        annotations:
+          - "@Id"
+          - "@Column(length = 30)"
+      lesson:
+        type: Lesson
+        mutability: val
+        annotations:
+          - "@OneToOne(fetch = FetchType.LAZY)"
+          - "@JoinColumn(name = \"lessonId\", nullable = false, unique = true)"
+      content:
+        type: String
+        mutability: var
+        annotations:
+          - "@Column(nullable = false, columnDefinition = \"TEXT\")"
+      editedBy:
+        type: User
+        mutability: var
+        annotations:
+          - "@ManyToOne(fetch = FetchType.LAZY)"
+          - "@JoinColumn(name = \"editedBy\", nullable = false)"
+      version:
+        type: Int
+        mutability: var
+        default: "1"
+        annotations:
+          - "@Column(nullable = false)"
+      createdAt:
+        type: Long
+        mutability: val
+        default: Instant.now().toEpochMilli()
+        annotations:
+          - "@Column(nullable = false, updatable = false)"
+      updatedAt:
+        type: Long
+        mutability: var
+        default: Instant.now().toEpochMilli()
+        annotations:
+          - "@Column(nullable = false)"
+    methods:
+      preUpdate:
+        annotation: "@PreUpdate"
+        body: "updatedAt = Instant.now().toEpochMilli()"
+
+schemas:
+  CreateSummaryRequest:
+    package: com.example.lib4gz.courses.model.payload
+    file: SummaryPayload.kt
+    type: object
+    required:
+      - content
+    properties:
+      content:
+        type: string
+
+  UpdateSummaryRequest:
+    package: com.example.lib4gz.courses.model.payload
+    file: SummaryPayload.kt
+    type: object
+    required:
+      - content
+    properties:
+      content:
+        type: string
+
+  SummaryResponse:
+    package: com.example.lib4gz.courses.model.payload
+    file: SummaryPayload.kt
+    type: object
+    properties:
+      id:
+        type: string
+        format: typeid
+      lessonId:
+        type: string
+        format: typeid
+      content:
+        type: string
+      editedBy:
+        $ref: "course.yaml#/schemas/UserSummary"
+      version:
+        type: integer
+      createdAt:
+        type: integer
+        format: int64
+      updatedAt:
+        type: integer
+        format: int64
+
+mapper:
+  SummaryMapper:
+    package: com.example.lib4gz.courses.model.mapper
+    file: CourseMapper.kt
+    pattern: component-class
+    annotation: "@Component"
+    notes:
+      - "In shared CourseMapper.kt file"
+      - "Uses CourseMapper.toUserSummary() from companion object for editedBy"
+    methods:
+      toResponse:
+        signature: "fun toResponse(summary: Summary): SummaryResponse"
+        mapping:
+          id: summary.id
+          lessonId: summary.lesson.id
+          content: summary.content
+          editedBy: "CourseMapper.toUserSummary(summary.editedBy)"
+          version: summary.version
+          createdAt: summary.createdAt
+          updatedAt: summary.updatedAt

@@ -1,0 +1,139 @@
+---
+metadata:
+  feature: module
+  description: Module models - Module entity, module DTOs, and mapper
+  source_files:
+    entity: src/main/kotlin/com/example/lib4gz/courses/model/entity/Courses.kt
+    payload: src/main/kotlin/com/example/lib4gz/courses/model/payload/ModulePayload.kt
+    mapper: src/main/kotlin/com/example/lib4gz/courses/model/mapper/CourseMapper.kt
+
+entity:
+  Module:
+    package: com.example.lib4gz.courses.model.entity
+    file: Courses.kt
+    table: modules
+    notes:
+      - "Shared entity file with Course, Enrollment, Lesson, Summary"
+    annotations:
+      - "@Entity"
+      - "@Table(name = \"modules\", uniqueConstraints = [UniqueConstraint(columnNames = [\"courseId\", \"orderIndex\"])])"
+      - "@SQLDelete(sql = \"UPDATE modules SET deleted_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint WHERE id = ?\")"
+      - "@Where(clause = \"deleted_at IS NULL\")"
+    fields:
+      id:
+        type: String
+        mutability: val
+        default: "IdGenerator.generate(\"mod\")"
+        annotations:
+          - "@Id"
+          - "@Column(length = 30)"
+      course:
+        type: Course
+        mutability: val
+        annotations:
+          - "@ManyToOne(fetch = FetchType.LAZY)"
+          - "@JoinColumn(name = \"courseId\", nullable = false)"
+      title:
+        type: String
+        mutability: var
+        annotations:
+          - "@Column(nullable = false, length = 500)"
+      orderIndex:
+        type: Int
+        mutability: var
+        annotations:
+          - "@Column(nullable = false)"
+      lessons:
+        type: MutableList<Lesson>
+        mutability: val
+        default: mutableListOf()
+        annotations:
+          - "@OneToMany(mappedBy = \"module\", cascade = [CascadeType.ALL], orphanRemoval = true)"
+          - "@Where(clause = \"deleted_at IS NULL\")"
+      createdAt:
+        type: Long
+        mutability: val
+        default: Instant.now().toEpochMilli()
+        annotations:
+          - "@Column(nullable = false, updatable = false)"
+      updatedAt:
+        type: Long
+        mutability: var
+        default: Instant.now().toEpochMilli()
+        annotations:
+          - "@Column(nullable = false)"
+      deletedAt:
+        type: Long?
+        mutability: var
+        default: "null"
+    methods:
+      preUpdate:
+        annotation: "@PreUpdate"
+        body: "updatedAt = Instant.now().toEpochMilli()"
+
+schemas:
+  CreateModuleRequest:
+    package: com.example.lib4gz.courses.model.payload
+    file: ModulePayload.kt
+    type: object
+    required:
+      - title
+    properties:
+      title:
+        type: string
+      orderIndex:
+        type: [integer, "null"]
+
+  UpdateModuleRequest:
+    package: com.example.lib4gz.courses.model.payload
+    file: ModulePayload.kt
+    type: object
+    properties:
+      title:
+        type: [string, "null"]
+      orderIndex:
+        type: [integer, "null"]
+
+  ModuleResponse:
+    package: com.example.lib4gz.courses.model.payload
+    file: ModulePayload.kt
+    type: object
+    properties:
+      id:
+        type: string
+        format: typeid
+      courseId:
+        type: string
+        format: typeid
+      title:
+        type: string
+      orderIndex:
+        type: integer
+      lessonCount:
+        type: [integer, "null"]
+      createdAt:
+        type: integer
+        format: int64
+      updatedAt:
+        type: integer
+        format: int64
+
+mapper:
+  ModuleMapper:
+    package: com.example.lib4gz.courses.model.mapper
+    file: CourseMapper.kt
+    pattern: component-class
+    annotation: "@Component"
+    notes:
+      - "In shared CourseMapper.kt file"
+    methods:
+      toResponse:
+        signature: "fun toResponse(module: Module, lessonCount: Int? = null): ModuleResponse"
+        mapping:
+          id: module.id
+          courseId: module.course.id
+          title: module.title
+          orderIndex: module.orderIndex
+          lessonCount: lessonCount
+          createdAt: module.createdAt
+          updatedAt: module.updatedAt

@@ -1,0 +1,2105 @@
+openapi: 3.1.0
+info:
+  title: lib4gz LMS Platform Backend API
+  description: >
+    RESTful API for the lib4gz Learning Management System platform.
+    Provides endpoints for user authentication, course management, enrollments,
+    modules, lessons, summaries, exercises, questions, and submissions.
+  version: 1.0.0
+  contact:
+    name: lib4gz Team
+
+servers:
+  - url: http://localhost:8080/api
+    description: Local Development
+
+security:
+  - ApiKeyAuth: []
+
+tags:
+  - name: auth
+    description: Authentication and user registration
+  - name: courses
+    description: Course management
+  - name: enrollments
+    description: Course enrollment management
+  - name: modules
+    description: Module management within courses
+  - name: lessons
+    description: Lesson management within modules
+  - name: summaries
+    description: Lesson summary management
+  - name: exercises
+    description: Exercise management within lessons
+  - name: questions
+    description: Question management within exercises
+  - name: submissions
+    description: Submission management for exercises
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: access_token
+      description: JWT access token
+
+  parameters:
+    XUserIdHeader:
+      name: X-User-Id
+      in: header
+      required: true
+      description: TypeID of the authenticated user, injected by JwtAuthFilter
+      schema:
+        type: string
+        format: typeid
+
+    CourseIdPath:
+      name: courseId
+      in: path
+      required: true
+      description: TypeID of the course
+      schema:
+        type: string
+        format: typeid
+
+    ModuleIdPath:
+      name: moduleId
+      in: path
+      required: true
+      description: TypeID of the module
+      schema:
+        type: string
+        format: typeid
+
+    LessonIdPath:
+      name: lessonId
+      in: path
+      required: true
+      description: TypeID of the lesson
+      schema:
+        type: string
+        format: typeid
+
+    ExerciseIdPath:
+      name: exerciseId
+      in: path
+      required: true
+      description: TypeID of the exercise
+      schema:
+        type: string
+        format: typeid
+
+    EnrollmentIdPath:
+      name: enrollmentId
+      in: path
+      required: true
+      description: TypeID of the enrollment
+      schema:
+        type: string
+        format: typeid
+
+    SubmissionIdPath:
+      name: submissionId
+      in: path
+      required: true
+      description: TypeID of the submission
+      schema:
+        type: string
+        format: typeid
+
+    AnswerIdPath:
+      name: answerId
+      in: path
+      required: true
+      description: TypeID of the answer
+      schema:
+        type: string
+        format: typeid
+
+  schemas:
+    # ---------- Enums ----------
+    Visibility:
+      type: string
+      enum:
+        - PUBLIC
+        - PRIVATE
+        - UNLISTED
+
+    EnrollmentRole:
+      type: string
+      enum:
+        - LEARNER
+        - TEACHER
+
+    EnrollmentStatus:
+      type: string
+      enum:
+        - PENDING
+        - ACTIVE
+        - REJECTED
+        - INACTIVE
+
+    ExerciseType:
+      type: string
+      enum:
+        - TEXT_ANSWER
+        - CODE
+        - FILE_UPLOAD
+        - MULTIPLE_CHOICE
+        - PROJECT_LINK
+
+    QuestionVisibility:
+      type: string
+      enum:
+        - VISIBLE
+        - HIDDEN
+
+    QuestionAction:
+      type: string
+      enum:
+        - CREATE
+        - UPDATE
+        - DELETE
+
+    SubmissionStatus:
+      type: string
+      enum:
+        - DRAFT
+        - SUBMITTED
+        - APPROVED
+        - NEEDS_REVISION
+
+    UserRole:
+      type: string
+      description: Global user roles. TEACHER role is required to create courses.
+      enum:
+        - ADMIN
+        - USER
+        - TEACHER
+
+    # ---------- Auth ----------
+    UserCreationRequest:
+      type: object
+      required:
+        - username
+        - email
+        - password
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+
+    LoginReq:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+
+    Token:
+      type: object
+      properties:
+        token:
+          type: string
+        expiredAt:
+          type: integer
+          format: int64
+
+    LoginResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/UserResponse"
+        accessToken:
+          $ref: "#/components/schemas/Token"
+
+    UserSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: typeid
+        name:
+          type: string
+        email:
+          type: string
+        avatarUrl:
+          type:
+            - string
+            - "null"
+
+    # ---------- Courses ----------
+    CreateCourseRequest:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+        description:
+          type:
+            - string
+            - "null"
+        visibility:
+          $ref: "#/components/schemas/Visibility"
+          default: PRIVATE
+        settings:
+          type: object
+          default: {}
+
+    UpdateCourseRequest:
+      type: object
+      properties:
+        title:
+          type:
+            - string
+            - "null"
+        description:
+          type:
+            - string
+            - "null"
+        visibility:
+          oneOf:
+            - $ref: "#/components/schemas/Visibility"
+            - type: "null"
+        settings:
+          type:
+            - object
+            - "null"
+
+    CourseResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: typeid
+        code:
+          type: string
+          description: Unique 10-digit numeric code for course lookup
+          pattern: "^\\d{10}$"
+        title:
+          type: string
+        description:
+          type:
+            - string
+            - "null"
+        visibility:
+          $ref: "#/components/schemas/Visibility"
+        createdBy:
+          $ref: "#/components/schemas/UserSummary"
+        settings:
+          type: object
+        createdAt:
+          type: integer
+          format: int64
+        updatedAt:
+          type: integer
+          format: int64
+        moduleCount:
+          type:
+            - integer
+            - "null"
+        enrollmentCount:
+          type:
+            - integer
+            - "null"
+
+    # ---------- Enrollments ----------
+    EnrollmentRequest:
+      type: object
+      properties:
+        role:
+          $ref: "#/components/schemas/EnrollmentRole"
+          default: LEARNER
+
+    UpdateEnrollmentRequest:
+      type: object
+      properties:
+        role:
+          oneOf:
+            - $ref: "#/components/schemas/EnrollmentRole"
+            - type: "null"
+        status:
+          oneOf:
+            - $ref: "#/components/schemas/EnrollmentStatus"
+            - type: "null"
+
+    EnrollmentResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: typeid
+        courseId:
+          type: string
+          format: typeid
+        courseName:
+          type: string
+        user:
+          $ref: "#/components/schemas/UserSummary"
+        role:
+          $ref: "#/components/schemas/EnrollmentRole"
+        status:
+          $ref: "#/components/schemas/EnrollmentStatus"
+        joinedAt:
+          type:
+            - integer
+            - "null"
+          format: int64
+        createdAt:
+          type: integer
+          format: int64
+        updatedAt:
+          type: integer
+          format: int64
+
+    # ---------- Modules ----------
+    CreateModuleRequest:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+        orderIndex:
+          type:
+            - integer
+            - "null"
+
+    UpdateModuleRequest:
+      type: object
+      properties:
+        title:
+          type:
+            - string
+            - "null"
+        orderIndex:
+          type:
+            - integer
+            - "null"
+
+    ModuleResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: typeid
+        courseId:
+          type: string
+          format: typeid
+        title:
+          type: string
+        orderIndex:
+          type: integer
+        lessonCount:
+          type:
+            - integer
+            - "null"
+        createdAt:
+          type: integer
+          format: int64
+        updatedAt:
+          type: integer
+          format: int64
+
+    # ---------- Lessons ----------
+    CreateLessonRequest:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+        orderIndex:
+          type:
+            - integer
+            - "null"
+
+    UpdateLessonRequest:
+      type: object
+      properties:
+        title:
+          type:
+            - string
+            - "null"
+        orderIndex:
+          type:
+            - integer
+            - "null"
+
+    LessonResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: typeid
+        moduleId:
+          type: string
+          format: typeid
+        title:
+          type: string
+        orderIndex:
+          type: integer
+        hasSummary:
+          type: boolean
+        exerciseCount:
+          type:
+            - integer
+            - "null"
+        createdAt:
+          type: integer
+          format: int64
+        updatedAt:
+          type: integer
+          format: int64
+
+    # ---------- Summaries ----------
+    CreateSummaryRequest:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+
+    UpdateSummaryRequest:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+
+    SummaryResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: typeid
+        lessonId:
+          type: string
+          format: typeid
+        content:
+          type: string
+        editedBy:
+          $ref: "#/components/schemas/UserSummary"
+        version:
+          type: integer
+        createdAt:
+          type: integer
+          format: int64
+        updatedAt:
+          type: integer
+          format: int64
+
+    # ---------- Exercises ----------
+    CreateExerciseRequest:
+      type: object
+      required:
+        - title
+        - type
+      properties:
+        title:
+          type: string
+        type:
+          $ref: "#/components/schemas/ExerciseType"
+        settings:
+          type: object
+          default: {}
+        orderIndex:
+          type:
+            - integer
+            - "null"
+
+    UpdateExerciseRequest:
+      type: object
+      properties:
+        title:
+          type:
+            - string
+            - "null"
+        type:
+          oneOf:
+            - $ref: "#/components/schemas/ExerciseType"
+            - type: "null"
+        settings:
+          type:
+            - object
+            - "null"
+        orderIndex:
+          type:
+            - integer
+            - "null"
+
+    ExerciseResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: typeid
+        lessonId:
+          type: string
+          format: typeid
+        title:
+          type: string
+        type:
+          $ref: "#/components/schemas/ExerciseType"
+        settings:
+          type: object
+        orderIndex:
+          type: integer
+        questionCount:
+          type:
+            - integer
+            - "null"
+        createdAt:
+          type: integer
+          format: int64
+        updatedAt:
+          type: integer
+          format: int64
+
+    # ---------- Questions ----------
+    CreateQuestionsRequest:
+      type: object
+      required:
+        - questions
+      properties:
+        questions:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreateQuestionItem"
+
+    CreateQuestionItem:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+        orderIndex:
+          type:
+            - integer
+            - "null"
+        meta:
+          type: object
+          default: {}
+        visibility:
+          $ref: "#/components/schemas/QuestionVisibility"
+          default: VISIBLE
+
+    UpdateQuestionsRequest:
+      type: object
+      required:
+        - questions
+      properties:
+        questions:
+          type: array
+          items:
+            $ref: "#/components/schemas/UpdateQuestionItem"
+
+    UpdateQuestionItem:
+      type: object
+      required:
+        - action
+      properties:
+        action:
+          $ref: "#/components/schemas/QuestionAction"
+        questionId:
+          type:
+            - string
+            - "null"
+          format: typeid
+        content:
+          type:
+            - string
+            - "null"
+        orderIndex:
+          type:
+            - integer
+            - "null"
+        meta:
+          type:
+            - object
+            - "null"
+        visibility:
+          oneOf:
+            - $ref: "#/components/schemas/QuestionVisibility"
+            - type: "null"
+
+    QuestionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: typeid
+        exerciseId:
+          type: string
+          format: typeid
+        content:
+          type: string
+        orderIndex:
+          type: integer
+        meta:
+          type: object
+        visibility:
+          $ref: "#/components/schemas/QuestionVisibility"
+        createdAt:
+          type: integer
+          format: int64
+        updatedAt:
+          type: integer
+          format: int64
+
+    QuestionsResponse:
+      type: object
+      properties:
+        created:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuestionResponse"
+        updated:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuestionResponse"
+        deleted:
+          type: array
+          items:
+            type: string
+            format: typeid
+
+    # ---------- Submissions ----------
+    CreateSubmissionRequest:
+      type: object
+      properties:
+        answers:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnswerRequest"
+          default: []
+
+    UpdateSubmissionRequest:
+      type: object
+      required:
+        - answers
+      properties:
+        answers:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnswerRequest"
+
+    AnswerRequest:
+      type: object
+      required:
+        - questionId
+      properties:
+        questionId:
+          type: string
+          format: typeid
+        answer:
+          type:
+            - string
+            - "null"
+
+    SubmissionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: typeid
+        exerciseId:
+          type: string
+          format: typeid
+        user:
+          $ref: "#/components/schemas/UserSummary"
+        status:
+          $ref: "#/components/schemas/SubmissionStatus"
+        answers:
+          type:
+            - array
+            - "null"
+          items:
+            $ref: "#/components/schemas/StudentAnswerResponse"
+        createdAt:
+          type: integer
+          format: int64
+        updatedAt:
+          type: integer
+          format: int64
+        submittedAt:
+          type:
+            - integer
+            - "null"
+          format: int64
+        approvedAt:
+          type:
+            - integer
+            - "null"
+          format: int64
+
+    StudentAnswerResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: typeid
+        questionId:
+          type: string
+          format: typeid
+        questionContent:
+          type: string
+        answer:
+          type:
+            - string
+            - "null"
+        teacherComment:
+          type:
+            - string
+            - "null"
+        createdAt:
+          type: integer
+          format: int64
+        updatedAt:
+          type: integer
+          format: int64
+
+    RevisionRequest:
+      type: object
+      properties:
+        feedback:
+          type:
+            - string
+            - "null"
+
+    CommentRequest:
+      type: object
+      required:
+        - comment
+      properties:
+        comment:
+          type: string
+
+    # ---------- Errors ----------
+    ErrorResp:
+      type: object
+      properties:
+        timestamp:
+          type: integer
+          format: int64
+        path:
+          type: string
+        status:
+          type: integer
+        requestId:
+          type: string
+        traceId:
+          type: string
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApiError"
+
+    ApiError:
+      oneOf:
+        - $ref: "#/components/schemas/InputError"
+        - $ref: "#/components/schemas/GenericError"
+      discriminator:
+        propertyName: type
+
+    InputError:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - InputError
+        field:
+          type: string
+        message:
+          type: string
+
+    GenericError:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - SystemError
+        reason:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Bad request - validation errors or malformed input
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResp"
+
+    Unauthorized:
+      description: Unauthorized - missing or invalid access token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResp"
+
+    Forbidden:
+      description: Forbidden - insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResp"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResp"
+
+paths:
+  # ========================================================================
+  # AUTH
+  # ========================================================================
+  /v1/auth/register:
+    post:
+      tags:
+        - auth
+      operationId: registerUser
+      summary: Register a new user
+      description: Creates a new user account with the provided credentials.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserCreationRequest"
+      responses:
+        "200":
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /v1/auth/login:
+    post:
+      tags:
+        - auth
+      operationId: loginUser
+      summary: Authenticate a user
+      description: Authenticates a user with username and password and returns a JWT access token.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginReq"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ========================================================================
+  # COURSES
+  # ========================================================================
+  /v1/courses:
+    get:
+      tags:
+        - courses
+      operationId: listCourses
+      summary: List courses
+      description: >
+        Retrieves courses based on the specified type filter.
+        Use type=created to list courses created by the user,
+        type=enrolled for enrolled courses, or type=public for publicly visible courses.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - name: type
+          in: query
+          required: false
+          description: Filter courses by relationship type
+          schema:
+            type: string
+            enum:
+              - created
+              - enrolled
+              - public
+      responses:
+        "200":
+          description: List of courses matching the filter
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CourseResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      tags:
+        - courses
+      operationId: createCourse
+      summary: Create a new course
+      description: >
+        Creates a new course. Requires the authenticated user to have the global
+        UserRole.TEACHER role. The user becomes the course creator and is
+        auto-enrolled as a TEACHER with ACTIVE status.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCourseRequest"
+      responses:
+        "201":
+          description: Course created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CourseResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: User does not have the TEACHER global role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/courses/{id}:
+    get:
+      tags:
+        - courses
+      operationId: getCourse
+      summary: Get a course by ID
+      description: Retrieves the details of a specific course.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - name: id
+          in: path
+          required: true
+          description: TypeID of the course
+          schema:
+            type: string
+            format: typeid
+      responses:
+        "200":
+          description: Course details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CourseResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      tags:
+        - courses
+      operationId: updateCourse
+      summary: Update a course
+      description: Partially updates a course. Only the course creator or a teacher can update it.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - name: id
+          in: path
+          required: true
+          description: TypeID of the course
+          schema:
+            type: string
+            format: typeid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCourseRequest"
+      responses:
+        "200":
+          description: Course updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CourseResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags:
+        - courses
+      operationId: deleteCourse
+      summary: Delete a course
+      description: Deletes a course. Only the course creator can delete it.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - name: id
+          in: path
+          required: true
+          description: TypeID of the course
+          schema:
+            type: string
+            format: typeid
+      responses:
+        "204":
+          description: Course deleted successfully
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/courses/code/{code}:
+    get:
+      tags:
+        - courses
+      operationId: getCourseByCode
+      summary: Get a course by its unique code
+      description: >
+        Retrieves the details of a specific course using its unique 10-digit numeric code.
+        Useful for sharing and joining courses via a short code instead of a full ID.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - name: code
+          in: path
+          required: true
+          description: Unique 10-digit numeric code of the course
+          schema:
+            type: string
+            pattern: "^\\d{10}$"
+      responses:
+        "200":
+          description: Course details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CourseResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ========================================================================
+  # ENROLLMENTS
+  # ========================================================================
+  /v1/courses/{courseId}/enroll:
+    post:
+      tags:
+        - enrollments
+      operationId: enrollInCourse
+      summary: Enroll in a course
+      description: >
+        Enrolls the authenticated user in the specified course.
+        Optionally specify an enrollment role (defaults to LEARNER).
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/CourseIdPath"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnrollmentRequest"
+      responses:
+        "201":
+          description: Enrollment created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/courses/{courseId}/enrollments:
+    get:
+      tags:
+        - enrollments
+      operationId: listCourseEnrollments
+      summary: List enrollments for a course
+      description: >
+        Retrieves all enrollments for a specific course.
+        Typically restricted to teachers and the course creator.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/CourseIdPath"
+      responses:
+        "200":
+          description: List of enrollments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EnrollmentResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/courses/{courseId}/my-enrollment:
+    get:
+      tags:
+        - enrollments
+      operationId: getMyEnrollment
+      summary: Get current user enrollment for a course
+      description: Retrieves the enrollment record for the authenticated user in the specified course.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/CourseIdPath"
+      responses:
+        "200":
+          description: Enrollment details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/enrollments/{enrollmentId}:
+    put:
+      tags:
+        - enrollments
+      operationId: updateEnrollment
+      summary: Update an enrollment
+      description: Updates the role or status of an enrollment. Restricted to teachers and course creators.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/EnrollmentIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEnrollmentRequest"
+      responses:
+        "200":
+          description: Enrollment updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags:
+        - enrollments
+      operationId: deleteEnrollment
+      summary: Delete an enrollment
+      description: Removes an enrollment. The user can unenroll themselves, or a teacher/creator can remove enrollments.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/EnrollmentIdPath"
+      responses:
+        "204":
+          description: Enrollment deleted successfully
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/enrollments/{enrollmentId}/approve:
+    post:
+      tags:
+        - enrollments
+      operationId: approveEnrollment
+      summary: Approve a pending enrollment
+      description: Approves a pending enrollment request. Restricted to teachers and course creators.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/EnrollmentIdPath"
+      responses:
+        "200":
+          description: Enrollment approved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/enrollments/{enrollmentId}/reject:
+    post:
+      tags:
+        - enrollments
+      operationId: rejectEnrollment
+      summary: Reject a pending enrollment
+      description: Rejects a pending enrollment request. Restricted to teachers and course creators.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/EnrollmentIdPath"
+      responses:
+        "200":
+          description: Enrollment rejected successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ========================================================================
+  # MODULES
+  # ========================================================================
+  /v1/courses/{courseId}/modules:
+    post:
+      tags:
+        - modules
+      operationId: createModule
+      summary: Create a new module in a course
+      description: Creates a new module within the specified course. Restricted to teachers and course creators.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/CourseIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateModuleRequest"
+      responses:
+        "201":
+          description: Module created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModuleResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    get:
+      tags:
+        - modules
+      operationId: listModules
+      summary: List modules in a course
+      description: Retrieves all modules for the specified course, ordered by orderIndex.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/CourseIdPath"
+      responses:
+        "200":
+          description: List of modules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ModuleResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/modules/{moduleId}:
+    get:
+      tags:
+        - modules
+      operationId: getModule
+      summary: Get a module by ID
+      description: Retrieves the details of a specific module.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/ModuleIdPath"
+      responses:
+        "200":
+          description: Module details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModuleResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      tags:
+        - modules
+      operationId: updateModule
+      summary: Update a module
+      description: Partially updates a module. Restricted to teachers and course creators.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/ModuleIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateModuleRequest"
+      responses:
+        "200":
+          description: Module updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModuleResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags:
+        - modules
+      operationId: deleteModule
+      summary: Delete a module
+      description: Deletes a module and all its lessons. Restricted to teachers and course creators.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/ModuleIdPath"
+      responses:
+        "204":
+          description: Module deleted successfully
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ========================================================================
+  # LESSONS
+  # ========================================================================
+  /v1/modules/{moduleId}/lessons:
+    post:
+      tags:
+        - lessons
+      operationId: createLesson
+      summary: Create a new lesson in a module
+      description: Creates a new lesson within the specified module. Restricted to teachers and course creators.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/ModuleIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLessonRequest"
+      responses:
+        "201":
+          description: Lesson created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LessonResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    get:
+      tags:
+        - lessons
+      operationId: listLessons
+      summary: List lessons in a module
+      description: Retrieves all lessons for the specified module, ordered by orderIndex.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/ModuleIdPath"
+      responses:
+        "200":
+          description: List of lessons
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LessonResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/lessons/{lessonId}:
+    get:
+      tags:
+        - lessons
+      operationId: getLesson
+      summary: Get a lesson by ID
+      description: Retrieves the details of a specific lesson.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/LessonIdPath"
+      responses:
+        "200":
+          description: Lesson details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LessonResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      tags:
+        - lessons
+      operationId: updateLesson
+      summary: Update a lesson
+      description: Partially updates a lesson. Restricted to teachers and course creators.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/LessonIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateLessonRequest"
+      responses:
+        "200":
+          description: Lesson updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LessonResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags:
+        - lessons
+      operationId: deleteLesson
+      summary: Delete a lesson
+      description: Deletes a lesson and all its content. Restricted to teachers and course creators.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/LessonIdPath"
+      responses:
+        "204":
+          description: Lesson deleted successfully
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ========================================================================
+  # SUMMARIES
+  # ========================================================================
+  /v1/lessons/{lessonId}/summary:
+    get:
+      tags:
+        - summaries
+      operationId: getLessonSummary
+      summary: Get the summary for a lesson
+      description: Retrieves the summary content for the specified lesson.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/LessonIdPath"
+      responses:
+        "200":
+          description: Summary details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SummaryResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    post:
+      tags:
+        - summaries
+      operationId: createOrUpdateLessonSummary
+      summary: Create or update a lesson summary
+      description: >
+        Creates a new summary for the lesson if none exists, or updates the existing summary.
+        Restricted to teachers and course creators.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/LessonIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSummaryRequest"
+      responses:
+        "201":
+          description: Summary created or updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SummaryResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ========================================================================
+  # EXERCISES
+  # ========================================================================
+  /v1/lessons/{lessonId}/exercises:
+    post:
+      tags:
+        - exercises
+      operationId: createExercise
+      summary: Create a new exercise in a lesson
+      description: Creates a new exercise within the specified lesson. Restricted to teachers and course creators.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/LessonIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateExerciseRequest"
+      responses:
+        "201":
+          description: Exercise created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExerciseResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    get:
+      tags:
+        - exercises
+      operationId: listExercises
+      summary: List exercises in a lesson
+      description: Retrieves all exercises for the specified lesson, ordered by orderIndex.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/LessonIdPath"
+      responses:
+        "200":
+          description: List of exercises
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ExerciseResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/exercises/{exerciseId}:
+    get:
+      tags:
+        - exercises
+      operationId: getExercise
+      summary: Get an exercise by ID
+      description: Retrieves the details of a specific exercise.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/ExerciseIdPath"
+      responses:
+        "200":
+          description: Exercise details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExerciseResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      tags:
+        - exercises
+      operationId: updateExercise
+      summary: Update an exercise
+      description: Partially updates an exercise. Restricted to teachers and course creators.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/ExerciseIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateExerciseRequest"
+      responses:
+        "200":
+          description: Exercise updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExerciseResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags:
+        - exercises
+      operationId: deleteExercise
+      summary: Delete an exercise
+      description: Deletes an exercise and all its questions and submissions. Restricted to teachers and course creators.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/ExerciseIdPath"
+      responses:
+        "204":
+          description: Exercise deleted successfully
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ========================================================================
+  # QUESTIONS
+  # ========================================================================
+  /v1/exercises/{exerciseId}/questions:
+    get:
+      tags:
+        - questions
+      operationId: listQuestions
+      summary: List questions for an exercise
+      description: Retrieves all questions for the specified exercise, ordered by orderIndex.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/ExerciseIdPath"
+      responses:
+        "200":
+          description: List of questions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuestionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    post:
+      tags:
+        - questions
+      operationId: createQuestions
+      summary: Create questions for an exercise
+      description: Creates one or more questions for the specified exercise in a single batch. Restricted to teachers and course creators.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/ExerciseIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateQuestionsRequest"
+      responses:
+        "201":
+          description: Questions created successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuestionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      tags:
+        - questions
+      operationId: updateQuestions
+      summary: Batch update questions for an exercise
+      description: >
+        Performs batch operations (create, update, delete) on questions for the specified exercise.
+        Each item in the request specifies an action to perform. Restricted to teachers and course creators.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/ExerciseIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateQuestionsRequest"
+      responses:
+        "200":
+          description: Questions updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuestionsResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ========================================================================
+  # SUBMISSIONS
+  # ========================================================================
+  /v1/exercises/{exerciseId}/submissions:
+    get:
+      tags:
+        - submissions
+      operationId: listSubmissions
+      summary: List submissions for an exercise
+      description: >
+        Retrieves all submissions for the specified exercise.
+        Teachers see all submissions; learners may only see their own depending on settings.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/ExerciseIdPath"
+      responses:
+        "200":
+          description: List of submissions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SubmissionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    post:
+      tags:
+        - submissions
+      operationId: createSubmission
+      summary: Create a new submission
+      description: >
+        Creates a new draft submission for the specified exercise.
+        The authenticated user becomes the submission owner.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/ExerciseIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSubmissionRequest"
+      responses:
+        "201":
+          description: Submission created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmissionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/exercises/{exerciseId}/my-submission:
+    get:
+      tags:
+        - submissions
+      operationId: getMySubmission
+      summary: Get current user submission for an exercise
+      description: Retrieves the submission record for the authenticated user for the specified exercise.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/ExerciseIdPath"
+      responses:
+        "200":
+          description: Submission details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmissionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/submissions/{submissionId}:
+    get:
+      tags:
+        - submissions
+      operationId: getSubmission
+      summary: Get a submission by ID
+      description: Retrieves the details of a specific submission including all answers.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/SubmissionIdPath"
+      responses:
+        "200":
+          description: Submission details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmissionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/submissions/{submissionId}/submit:
+    post:
+      tags:
+        - submissions
+      operationId: submitSubmission
+      summary: Submit a draft submission for review
+      description: >
+        Transitions a submission from DRAFT to SUBMITTED status.
+        Once submitted, the learner cannot edit their answers until revision is requested.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/SubmissionIdPath"
+      responses:
+        "200":
+          description: Submission submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmissionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/submissions/{submissionId}/approve:
+    post:
+      tags:
+        - submissions
+      operationId: approveSubmission
+      summary: Approve a submitted submission
+      description: >
+        Transitions a submission from SUBMITTED to APPROVED status.
+        Restricted to teachers and course creators.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/SubmissionIdPath"
+      responses:
+        "200":
+          description: Submission approved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmissionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/submissions/{submissionId}/revision:
+    post:
+      tags:
+        - submissions
+      operationId: requestRevision
+      summary: Request revision of a submission
+      description: >
+        Transitions a submission from SUBMITTED to NEEDS_REVISION status.
+        Optionally includes feedback for the learner. Restricted to teachers and course creators.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/SubmissionIdPath"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RevisionRequest"
+      responses:
+        "200":
+          description: Revision requested successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmissionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/answers/{answerId}/comment:
+    post:
+      tags:
+        - submissions
+      operationId: commentOnAnswer
+      summary: Add a teacher comment to an answer
+      description: >
+        Adds or updates a teacher comment on a specific student answer.
+        Restricted to teachers and course creators.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+        - $ref: "#/components/parameters/AnswerIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommentRequest"
+      responses:
+        "200":
+          description: Comment added successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmissionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"

@@ -1,0 +1,1135 @@
+{
+  "info": {
+    "name": "LMS Platform API - Phase 1",
+    "description": "API collection for LMS Platform backend Phase 1",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string",
+      "description": "JWT token from login"
+    },
+    {
+      "key": "courseId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "moduleId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "lessonId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "exerciseId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "submissionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "enrollmentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "questionId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test User\",\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.token) {",
+                  "    pm.collectionVariables.set('access_token', jsonData.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Courses",
+      "item": [
+        {
+          "name": "Create Course",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.id) {",
+                  "    pm.collectionVariables.set('courseId', jsonData.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Introduction to Programming\",\n  \"description\": \"Learn the basics of programming\",\n  \"visibility\": \"PUBLIC\",\n  \"settings\": {\n    \"allowSelfEnrollment\": true\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/courses",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "courses"]
+            }
+          }
+        },
+        {
+          "name": "List Courses (Enrolled)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/courses",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "courses"]
+            }
+          }
+        },
+        {
+          "name": "List Courses (Created)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/courses?type=created",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "courses"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "created"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Courses (Public)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/courses?type=public",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "courses"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "public"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Course by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/courses/{{courseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "courses", "{{courseId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Course",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Course Title\",\n  \"visibility\": \"PRIVATE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/courses/{{courseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "courses", "{{courseId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Course",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/courses/{{courseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "courses", "{{courseId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Enrollments",
+      "item": [
+        {
+          "name": "Request Enrollment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.id) {",
+                  "    pm.collectionVariables.set('enrollmentId', jsonData.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"LEARNER\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/courses/{{courseId}}/enroll",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "courses", "{{courseId}}", "enroll"]
+            }
+          }
+        },
+        {
+          "name": "List Course Enrollments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/courses/{{courseId}}/enrollments",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "courses", "{{courseId}}", "enrollments"]
+            }
+          }
+        },
+        {
+          "name": "Get My Enrollment",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/courses/{{courseId}}/my-enrollment",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "courses", "{{courseId}}", "my-enrollment"]
+            }
+          }
+        },
+        {
+          "name": "Approve Enrollment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/enrollments/{{enrollmentId}}/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "enrollments", "{{enrollmentId}}", "approve"]
+            }
+          }
+        },
+        {
+          "name": "Reject Enrollment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/enrollments/{{enrollmentId}}/reject",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "enrollments", "{{enrollmentId}}", "reject"]
+            }
+          }
+        },
+        {
+          "name": "Update Enrollment",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"TEACHER\",\n  \"status\": \"ACTIVE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/enrollments/{{enrollmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "enrollments", "{{enrollmentId}}"]
+            }
+          }
+        },
+        {
+          "name": "Remove Enrollment",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/enrollments/{{enrollmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "enrollments", "{{enrollmentId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Modules",
+      "item": [
+        {
+          "name": "Create Module",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.id) {",
+                  "    pm.collectionVariables.set('moduleId', jsonData.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Module 1: Getting Started\",\n  \"orderIndex\": 0\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/courses/{{courseId}}/modules",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "courses", "{{courseId}}", "modules"]
+            }
+          }
+        },
+        {
+          "name": "List Course Modules",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/courses/{{courseId}}/modules",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "courses", "{{courseId}}", "modules"]
+            }
+          }
+        },
+        {
+          "name": "Get Module by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/modules/{{moduleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "modules", "{{moduleId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Module",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Module Title\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/modules/{{moduleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "modules", "{{moduleId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Module",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/modules/{{moduleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "modules", "{{moduleId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Lessons",
+      "item": [
+        {
+          "name": "Create Lesson",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.id) {",
+                  "    pm.collectionVariables.set('lessonId', jsonData.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Lesson 1: Introduction\",\n  \"orderIndex\": 0\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/modules/{{moduleId}}/lessons",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "modules", "{{moduleId}}", "lessons"]
+            }
+          }
+        },
+        {
+          "name": "List Module Lessons",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/modules/{{moduleId}}/lessons",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "modules", "{{moduleId}}", "lessons"]
+            }
+          }
+        },
+        {
+          "name": "Get Lesson by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/lessons/{{lessonId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lessons", "{{lessonId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Lesson",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Lesson Title\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/lessons/{{lessonId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lessons", "{{lessonId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Lesson",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/lessons/{{lessonId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lessons", "{{lessonId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Summaries",
+      "item": [
+        {
+          "name": "Get Lesson Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/lessons/{{lessonId}}/summary",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lessons", "{{lessonId}}", "summary"]
+            }
+          }
+        },
+        {
+          "name": "Create/Update Summary",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"# Lesson Summary\\n\\nThis lesson covers the basics of programming...\\n\\n## Key Points\\n- Variables\\n- Data Types\\n- Control Flow\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/lessons/{{lessonId}}/summary",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lessons", "{{lessonId}}", "summary"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Exercises",
+      "item": [
+        {
+          "name": "Create Exercise",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.id) {",
+                  "    pm.collectionVariables.set('exerciseId', jsonData.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Exercise 1: Basic Questions\",\n  \"type\": \"TEXT_ANSWER\",\n  \"settings\": {\n    \"timeLimit\": 30,\n    \"maxAttempts\": 3\n  },\n  \"orderIndex\": 0\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/lessons/{{lessonId}}/exercises",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lessons", "{{lessonId}}", "exercises"]
+            }
+          }
+        },
+        {
+          "name": "List Lesson Exercises",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/lessons/{{lessonId}}/exercises",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lessons", "{{lessonId}}", "exercises"]
+            }
+          }
+        },
+        {
+          "name": "Get Exercise by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/exercises/{{exerciseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "exercises", "{{exerciseId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Exercise",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Exercise Title\",\n  \"type\": \"CODE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/exercises/{{exerciseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "exercises", "{{exerciseId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Exercise",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/exercises/{{exerciseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "exercises", "{{exerciseId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Questions",
+      "item": [
+        {
+          "name": "Get Questions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/exercises/{{exerciseId}}/questions",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "exercises", "{{exerciseId}}", "questions"]
+            }
+          }
+        },
+        {
+          "name": "Create Questions (Batch)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData && jsonData.length > 0) {",
+                  "    pm.collectionVariables.set('questionId', jsonData[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questions\": [\n    {\n      \"content\": \"What is a variable?\",\n      \"orderIndex\": 0,\n      \"meta\": {\n        \"points\": 10\n      },\n      \"visibility\": \"VISIBLE\"\n    },\n    {\n      \"content\": \"Explain the difference between let and const.\",\n      \"orderIndex\": 1,\n      \"meta\": {\n        \"points\": 15\n      },\n      \"visibility\": \"VISIBLE\"\n    },\n    {\n      \"content\": \"What is a function?\",\n      \"orderIndex\": 2,\n      \"meta\": {\n        \"points\": 10\n      },\n      \"visibility\": \"VISIBLE\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/exercises/{{exerciseId}}/questions",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "exercises", "{{exerciseId}}", "questions"]
+            }
+          }
+        },
+        {
+          "name": "Update Questions (Batch with Actions)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questions\": [\n    {\n      \"action\": \"UPDATE\",\n      \"questionId\": \"{{questionId}}\",\n      \"content\": \"Updated: What is a variable in programming?\",\n      \"visibility\": \"VISIBLE\"\n    },\n    {\n      \"action\": \"CREATE\",\n      \"content\": \"New question: What is an array?\",\n      \"orderIndex\": 3,\n      \"meta\": {\n        \"points\": 20\n      },\n      \"visibility\": \"VISIBLE\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/exercises/{{exerciseId}}/questions",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "exercises", "{{exerciseId}}", "questions"]
+            }
+          }
+        },
+        {
+          "name": "Delete Question (via Batch Update)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questions\": [\n    {\n      \"action\": \"DELETE\",\n      \"questionId\": \"{{questionId}}\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/exercises/{{exerciseId}}/questions",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "exercises", "{{exerciseId}}", "questions"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Submissions",
+      "item": [
+        {
+          "name": "Create/Update Submission (Draft)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.id) {",
+                  "    pm.collectionVariables.set('submissionId', jsonData.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"{{questionId}}\",\n      \"answer\": \"A variable is a named container for storing data values.\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/exercises/{{exerciseId}}/submissions",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "exercises", "{{exerciseId}}", "submissions"]
+            }
+          }
+        },
+        {
+          "name": "Get My Submission",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/exercises/{{exerciseId}}/my-submission",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "exercises", "{{exerciseId}}", "my-submission"]
+            }
+          }
+        },
+        {
+          "name": "List Exercise Submissions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/exercises/{{exerciseId}}/submissions",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "exercises", "{{exerciseId}}", "submissions"]
+            }
+          }
+        },
+        {
+          "name": "Get Submission by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/submissions/{{submissionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "submissions", "{{submissionId}}"]
+            }
+          }
+        },
+        {
+          "name": "Submit for Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/submissions/{{submissionId}}/submit",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "submissions", "{{submissionId}}", "submit"]
+            }
+          }
+        },
+        {
+          "name": "Approve Submission (Teacher)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/submissions/{{submissionId}}/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "submissions", "{{submissionId}}", "approve"]
+            }
+          }
+        },
+        {
+          "name": "Request Revision (Teacher)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"feedback\": \"Please provide more details in your answer.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/submissions/{{submissionId}}/revision",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "submissions", "{{submissionId}}", "revision"]
+            }
+          }
+        },
+        {
+          "name": "Add Teacher Comment to Answer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "access_token",
+                "value": "{{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Good explanation! Consider adding an example.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/answers/{{answerId}}/comment",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "answers", "{{answerId}}", "comment"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

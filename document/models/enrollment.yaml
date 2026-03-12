@@ -1,0 +1,180 @@
+---
+metadata:
+  feature: enrollment
+  description: Enrollment models - Enrollment entity, enrollment DTOs, and mapper
+  source_files:
+    entity: src/main/kotlin/com/example/lib4gz/courses/model/entity/Courses.kt
+    payload: src/main/kotlin/com/example/lib4gz/courses/model/payload/EnrollmentPayload.kt
+    mapper: src/main/kotlin/com/example/lib4gz/courses/model/mapper/CourseMapper.kt
+
+enums:
+  EnrollmentRole:
+    package: com.example.lib4gz.courses.model.entity
+    file: Courses.kt
+    values:
+      - LEARNER
+      - TEACHER
+
+  EnrollmentStatus:
+    package: com.example.lib4gz.courses.model.entity
+    file: Courses.kt
+    values:
+      - PENDING
+      - ACTIVE
+      - REJECTED
+      - INACTIVE
+
+entity:
+  Enrollment:
+    package: com.example.lib4gz.courses.model.entity
+    file: Courses.kt
+    table: enrollments
+    notes:
+      - "NOT soft-deleted. Uses hard delete."
+      - "Shared entity file with Course, Module, Lesson, Summary"
+    annotations:
+      - "@Entity"
+      - "@Table(name = \"enrollments\", uniqueConstraints = [UniqueConstraint(columnNames = [\"courseId\", \"userId\"])])"
+    fields:
+      id:
+        type: String
+        mutability: val
+        default: "IdGenerator.generate(\"enr\")"
+        annotations:
+          - "@Id"
+          - "@Column(length = 30)"
+      course:
+        type: Course
+        mutability: val
+        annotations:
+          - "@ManyToOne(fetch = FetchType.LAZY)"
+          - "@JoinColumn(name = \"courseId\", nullable = false)"
+      user:
+        type: User
+        mutability: val
+        annotations:
+          - "@ManyToOne(fetch = FetchType.LAZY)"
+          - "@JoinColumn(name = \"userId\", nullable = false)"
+      role:
+        type: EnrollmentRole
+        mutability: var
+        default: EnrollmentRole.LEARNER
+        annotations:
+          - "@Enumerated(EnumType.STRING)"
+          - "@Column(nullable = false, length = 50)"
+      status:
+        type: EnrollmentStatus
+        mutability: var
+        default: EnrollmentStatus.PENDING
+        annotations:
+          - "@Enumerated(EnumType.STRING)"
+          - "@Column(nullable = false, length = 50)"
+      joinedAt:
+        type: Long?
+        mutability: var
+        default: "null"
+      createdAt:
+        type: Long
+        mutability: val
+        default: Instant.now().toEpochMilli()
+        annotations:
+          - "@Column(nullable = false, updatable = false)"
+      updatedAt:
+        type: Long
+        mutability: var
+        default: Instant.now().toEpochMilli()
+        annotations:
+          - "@Column(nullable = false)"
+    methods:
+      approve:
+        body: "status = EnrollmentStatus.ACTIVE; joinedAt = Instant.now().toEpochMilli()"
+      reject:
+        body: "status = EnrollmentStatus.REJECTED"
+      isActive:
+        returns: Boolean
+        body: "status == EnrollmentStatus.ACTIVE"
+      isTeacher:
+        returns: Boolean
+        body: "role == EnrollmentRole.TEACHER"
+      isLearner:
+        returns: Boolean
+        body: "role == EnrollmentRole.LEARNER"
+      preUpdate:
+        annotation: "@PreUpdate"
+        body: "updatedAt = Instant.now().toEpochMilli()"
+
+schemas:
+  EnrollmentRequest:
+    package: com.example.lib4gz.courses.model.payload
+    file: EnrollmentPayload.kt
+    type: object
+    properties:
+      role:
+        $ref: "#/enums/EnrollmentRole"
+        default: LEARNER
+
+  UpdateEnrollmentRequest:
+    package: com.example.lib4gz.courses.model.payload
+    file: EnrollmentPayload.kt
+    type: object
+    properties:
+      role:
+        oneOf:
+          - $ref: "#/enums/EnrollmentRole"
+          - type: "null"
+      status:
+        oneOf:
+          - $ref: "#/enums/EnrollmentStatus"
+          - type: "null"
+
+  EnrollmentResponse:
+    package: com.example.lib4gz.courses.model.payload
+    file: EnrollmentPayload.kt
+    type: object
+    properties:
+      id:
+        type: string
+        format: typeid
+      courseId:
+        type: string
+        format: typeid
+      courseName:
+        type: string
+      user:
+        $ref: "course.yaml#/schemas/UserSummary"
+      role:
+        $ref: "#/enums/EnrollmentRole"
+      status:
+        $ref: "#/enums/EnrollmentStatus"
+      joinedAt:
+        type: [integer, "null"]
+        format: int64
+      createdAt:
+        type: integer
+        format: int64
+      updatedAt:
+        type: integer
+        format: int64
+
+mapper:
+  EnrollmentMapper:
+    package: com.example.lib4gz.courses.model.mapper
+    file: CourseMapper.kt
+    pattern: component-class
+    annotation: "@Component"
+    notes:
+      - "In shared CourseMapper.kt file"
+      - "Uses CourseMapper.toUserSummary() from companion object"
+    methods:
+      toResponse:
+        signature: "fun toResponse(enrollment: Enrollment, courseName: String): EnrollmentResponse"
+        mapping:
+          id: enrollment.id
+          courseId: enrollment.course.id
+          courseName: courseName
+          user: "CourseMapper.toUserSummary(enrollment.user)"
+          role: enrollment.role
+          status: enrollment.status
+          joinedAt: enrollment.joinedAt
+          createdAt: enrollment.createdAt
+          updatedAt: enrollment.updatedAt

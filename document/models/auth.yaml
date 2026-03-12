@@ -1,0 +1,204 @@
+---
+metadata:
+  feature: auth
+  description: Authentication models - User entity, auth DTOs, and mapper
+  source_files:
+    entity: src/main/kotlin/com/example/lib4gz/auth/model/entity/User.kt
+    payload: src/main/kotlin/com/example/lib4gz/auth/model/payload/UserPayload.kt
+    mapper: src/main/kotlin/com/example/lib4gz/auth/model/mapper/UserMapper.kt
+
+enums:
+  UserRole:
+    package: com.example.lib4gz.auth.model.entity
+    file: User.kt
+    values:
+      - ADMIN
+      - USER
+      - TEACHER
+    notes:
+      - "TEACHER role is required to create courses. Users without this global role cannot call POST /v1/courses."
+
+  UserStatus:
+    package: com.example.lib4gz.auth.model.entity
+    file: User.kt
+    values:
+      - ACTIVE
+      - INACTIVE
+      - BANNED
+
+entity:
+  User:
+    package: com.example.lib4gz.auth.model.entity
+    file: User.kt
+    table: users
+    annotations:
+      - "@Entity"
+      - "@Table(name = \"users\")"
+      - "@SQLDelete(sql = \"UPDATE users SET deleted_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint WHERE id = ?\")"
+    notes:
+      - "No @Where annotation (unlike other soft-deleted entities). Soft-deleted users can still appear in queries."
+    fields:
+      id:
+        type: String
+        mutability: val
+        default: "IdGenerator.generate(\"usr\")"
+        annotations:
+          - "@Id"
+          - "@Column(length = 50)"
+      email:
+        type: String
+        mutability: val
+        annotations:
+          - "@Column(nullable = true, unique = true, length = 255)"
+      username:
+        type: String
+        mutability: val
+        annotations:
+          - "@Column(nullable = false, unique = true, length = 255)"
+      password:
+        type: String?
+        mutability: val
+        default: "null"
+        annotations:
+          - "@Column(name = \"passwordHash\", length = 255)"
+      name:
+        type: String
+        mutability: var
+        annotations:
+          - "@Column(nullable = false, length = 255)"
+      avatarUrl:
+        type: String?
+        mutability: var
+        default: "null"
+      roles:
+        type: MutableSet<UserRole>
+        mutability: val
+        default: mutableSetOf(UserRole.USER)
+        annotations:
+          - "@ElementCollection(targetClass = UserRole::class, fetch = FetchType.EAGER)"
+          - "@CollectionTable(name = \"user_global_roles\", joinColumns = [JoinColumn(name = \"userId\")])"
+          - "@Enumerated(EnumType.STRING)"
+          - "@Column(name = \"role\")"
+      emailVerified:
+        type: Boolean
+        mutability: var
+        default: "false"
+        annotations:
+          - "@Column(nullable = false)"
+      status:
+        type: UserStatus
+        mutability: var
+        default: UserStatus.ACTIVE
+        annotations:
+          - "@Enumerated(EnumType.STRING)"
+          - "@Column(nullable = false, length = 20)"
+      createdAt:
+        type: Long
+        mutability: val
+        default: Instant.now().toEpochMilli()
+        annotations:
+          - "@Column(nullable = false, updatable = false)"
+      updatedAt:
+        type: Long
+        mutability: var
+        default: Instant.now().toEpochMilli()
+        annotations:
+          - "@Column(nullable = false)"
+      deletedAt:
+        type: Long?
+        mutability: var
+        default: "null"
+    methods:
+      preUpdate:
+        annotation: "@PreUpdate"
+        body: "updatedAt = Instant.now().toEpochMilli()"
+      hasRole:
+        parameters: "role: UserRole"
+        returns: Boolean
+        body: "roles.contains(role)"
+      isAdmin:
+        returns: Boolean
+        body: "hasRole(UserRole.ADMIN)"
+      isTeacher:
+        returns: Boolean
+        body: "hasRole(UserRole.TEACHER)"
+
+schemas:
+  UserCreationRequest:
+    package: com.example.lib4gz.auth.model.payload
+    file: UserPayload.kt
+    type: object
+    required:
+      - username
+      - email
+      - password
+    properties:
+      username:
+        type: string
+      email:
+        type: string
+      password:
+        type: string
+    methods:
+      toEntity:
+        returns: User
+        body: "User(id = IdGenerator.generate(\"usr\"), email = email, password = password, name = username, username = username)"
+
+  UserResponse:
+    package: com.example.lib4gz.auth.model.payload
+    file: UserPayload.kt
+    type: object
+    properties:
+      id:
+        type: string
+      username:
+        type: string
+      email:
+        type: string
+
+  LoginReq:
+    package: com.example.lib4gz.auth.model.payload
+    file: UserPayload.kt
+    type: object
+    required:
+      - username
+      - password
+    properties:
+      username:
+        type: string
+      password:
+        type: string
+
+  Token:
+    package: com.example.lib4gz.auth.model.payload
+    file: UserPayload.kt
+    type: object
+    properties:
+      token:
+        type: string
+      expiredAt:
+        type: integer
+        format: int64
+
+  LoginResponse:
+    package: com.example.lib4gz.auth.model.payload
+    file: UserPayload.kt
+    type: object
+    properties:
+      user:
+        $ref: "#/schemas/UserResponse"
+      accessToken:
+        $ref: "#/schemas/Token"
+
+mapper:
+  UserMapper:
+    package: com.example.lib4gz.auth.model.mapper
+    file: UserMapper.kt
+    pattern: extension-function
+    methods:
+      toResponse:
+        signature: "fun User.toResponse(): UserResponse"
+        mapping:
+          id: "id"
+          username: username
+          email: email

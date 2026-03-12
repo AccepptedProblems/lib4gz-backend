@@ -1,0 +1,265 @@
+---
+metadata:
+  feature: question
+  description: Question models - Question entity, question DTOs, and mapper
+  source_files:
+    entity: src/main/kotlin/com/example/lib4gz/exercise/model/entity/Exercise.kt
+    payload: src/main/kotlin/com/example/lib4gz/exercise/model/payload/QuestionPayload.kt
+    mapper: src/main/kotlin/com/example/lib4gz/exercise/model/mapper/ExerciseMapper.kt
+
+enums:
+  QuestionVisibility:
+    package: com.example.lib4gz.exercise.model.entity
+    file: Exercise.kt
+    values:
+      - VISIBLE
+      - HIDDEN
+
+  QuestionAction:
+    package: com.example.lib4gz.exercise.model.payload
+    file: QuestionPayload.kt
+    description: "Used in batch update operations to specify action per question"
+    values:
+      - CREATE
+      - UPDATE
+      - DELETE
+
+entity:
+  Question:
+    package: com.example.lib4gz.exercise.model.entity
+    file: Exercise.kt
+    table: questions
+    notes:
+      - "Shared entity file with Exercise, Submission, StudentAnswer"
+      - "IMPORTANT: exerciseId is a plain UUID column, NOT a JPA @ManyToOne relationship"
+      - "This means repository methods use findByExerciseId (not findByExercise_Id)"
+    annotations:
+      - "@Entity"
+      - "@Table(name = \"questions\")"
+      - "@SQLDelete(sql = \"UPDATE questions SET deleted_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint WHERE id = ?\")"
+      - "@Where(clause = \"deleted_at IS NULL\")"
+    fields:
+      id:
+        type: String
+        mutability: val
+        default: "IdGenerator.generate(\"qst\")"
+        annotations:
+          - "@Id"
+          - "@Column(length = 30)"
+      exerciseId:
+        type: String
+        mutability: val
+        description: "Plain UUID column, NOT a JPA relationship"
+        annotations:
+          - "@Column(nullable = false, length = 30)"
+      content:
+        type: String
+        mutability: var
+        annotations:
+          - "@Column(nullable = false, columnDefinition = \"TEXT\")"
+      orderIndex:
+        type: Int
+        mutability: var
+        annotations:
+          - "@Column(nullable = false)"
+      meta:
+        type: Map<String, Any>
+        mutability: var
+        default: emptyMap()
+        annotations:
+          - "@JdbcTypeCode(SqlTypes.JSON)"
+          - "@Column(columnDefinition = \"jsonb\")"
+      visibility:
+        type: QuestionVisibility
+        mutability: var
+        default: QuestionVisibility.VISIBLE
+        annotations:
+          - "@Enumerated(EnumType.STRING)"
+          - "@Column(length = 50)"
+      createdAt:
+        type: Long
+        mutability: val
+        default: Instant.now().toEpochMilli()
+      updatedAt:
+        type: Long
+        mutability: var
+        default: Instant.now().toEpochMilli()
+      deletedAt:
+        type: Long?
+        mutability: var
+        default: "null"
+    methods:
+      preUpdate:
+        annotation: "@PreUpdate"
+        body: "updatedAt = Instant.now().toEpochMilli()"
+
+schemas:
+  # Batch Create
+  CreateQuestionsRequest:
+    package: com.example.lib4gz.exercise.model.payload
+    file: QuestionPayload.kt
+    type: object
+    required:
+      - questions
+    properties:
+      questions:
+        type: array
+        items:
+          $ref: "#/schemas/CreateQuestionItem"
+
+  CreateQuestionItem:
+    package: com.example.lib4gz.exercise.model.payload
+    file: QuestionPayload.kt
+    type: object
+    required:
+      - content
+    properties:
+      content:
+        type: string
+      orderIndex:
+        type: [integer, "null"]
+      meta:
+        type: object
+        default: {}
+      visibility:
+        $ref: "#/enums/QuestionVisibility"
+        default: VISIBLE
+
+  # Batch Update (with actions)
+  UpdateQuestionsRequest:
+    package: com.example.lib4gz.exercise.model.payload
+    file: QuestionPayload.kt
+    type: object
+    required:
+      - questions
+    properties:
+      questions:
+        type: array
+        items:
+          $ref: "#/schemas/UpdateQuestionItem"
+
+  UpdateQuestionItem:
+    package: com.example.lib4gz.exercise.model.payload
+    file: QuestionPayload.kt
+    type: object
+    required:
+      - action
+    properties:
+      action:
+        $ref: "#/enums/QuestionAction"
+      questionId:
+        type: [string, "null"]
+        format: typeid
+      content:
+        type: [string, "null"]
+      orderIndex:
+        type: [integer, "null"]
+      meta:
+        type: [object, "null"]
+      visibility:
+        oneOf:
+          - $ref: "#/enums/QuestionVisibility"
+          - type: "null"
+
+  # Single operations (used internally)
+  CreateQuestionRequest:
+    package: com.example.lib4gz.exercise.model.payload
+    file: QuestionPayload.kt
+    type: object
+    required:
+      - content
+    properties:
+      content:
+        type: string
+      orderIndex:
+        type: [integer, "null"]
+      meta:
+        type: object
+        default: {}
+      visibility:
+        $ref: "#/enums/QuestionVisibility"
+        default: VISIBLE
+
+  UpdateQuestionRequest:
+    package: com.example.lib4gz.exercise.model.payload
+    file: QuestionPayload.kt
+    type: object
+    properties:
+      content:
+        type: [string, "null"]
+      orderIndex:
+        type: [integer, "null"]
+      meta:
+        type: [object, "null"]
+      visibility:
+        oneOf:
+          - $ref: "#/enums/QuestionVisibility"
+          - type: "null"
+
+  # Responses
+  QuestionResponse:
+    package: com.example.lib4gz.exercise.model.payload
+    file: QuestionPayload.kt
+    type: object
+    properties:
+      id:
+        type: string
+        format: typeid
+      exerciseId:
+        type: string
+        format: typeid
+      content:
+        type: string
+      orderIndex:
+        type: integer
+      meta:
+        type: object
+      visibility:
+        $ref: "#/enums/QuestionVisibility"
+      createdAt:
+        type: integer
+        format: int64
+      updatedAt:
+        type: integer
+        format: int64
+
+  QuestionsResponse:
+    package: com.example.lib4gz.exercise.model.payload
+    file: QuestionPayload.kt
+    description: "Response for batch update operations"
+    type: object
+    properties:
+      created:
+        type: array
+        items:
+          $ref: "#/schemas/QuestionResponse"
+      updated:
+        type: array
+        items:
+          $ref: "#/schemas/QuestionResponse"
+      deleted:
+        type: array
+        items:
+          type: string
+          format: typeid
+
+mapper:
+  QuestionMapper:
+    package: com.example.lib4gz.exercise.model.mapper
+    file: ExerciseMapper.kt
+    pattern: component-class
+    annotation: "@Component"
+    notes:
+      - "In shared ExerciseMapper.kt file with ExerciseMapper and SubmissionMapper"
+    methods:
+      toResponse:
+        signature: "fun toResponse(question: Question): QuestionResponse"
+        mapping:
+          id: question.id
+          exerciseId: question.exerciseId
+          content: question.content
+          orderIndex: question.orderIndex
+          meta: question.meta
+          visibility: question.visibility
+          createdAt: question.createdAt
+          updatedAt: question.updatedAt

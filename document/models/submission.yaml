@@ -1,0 +1,302 @@
+---
+metadata:
+  feature: submission
+  description: Submission models - Submission and StudentAnswer entities, DTOs, and mapper
+  source_files:
+    entity: src/main/kotlin/com/example/lib4gz/exercise/model/entity/Exercise.kt
+    payload: src/main/kotlin/com/example/lib4gz/exercise/model/payload/SubmissionPayload.kt
+    controller_models: src/main/kotlin/com/example/lib4gz/exercise/controller/SubmissionController.kt
+    mapper: src/main/kotlin/com/example/lib4gz/exercise/model/mapper/ExerciseMapper.kt
+
+enums:
+  SubmissionStatus:
+    package: com.example.lib4gz.exercise.model.entity
+    file: Exercise.kt
+    values:
+      - DRAFT
+      - SUBMITTED
+      - APPROVED
+      - NEEDS_REVISION
+    state_machine:
+      DRAFT:
+        transitions_to: [SUBMITTED]
+        actor: Student
+        method: submit()
+      NEEDS_REVISION:
+        transitions_to: [SUBMITTED]
+        actor: Student
+        method: submit()
+      SUBMITTED:
+        transitions_to: [APPROVED, NEEDS_REVISION]
+        actor: Teacher
+        methods: [approve(), requestRevision()]
+      APPROVED:
+        transitions_to: []
+        description: Terminal state
+
+entities:
+  Submission:
+    package: com.example.lib4gz.exercise.model.entity
+    file: Exercise.kt
+    table: submissions
+    notes:
+      - "Shared entity file with Exercise, Question, StudentAnswer"
+      - "NOT soft-deleted (no @SQLDelete or @Where)"
+      - "One per exercise per user (unique constraint)"
+    annotations:
+      - "@Entity"
+      - "@Table(name = \"submissions\", uniqueConstraints = [UniqueConstraint(columnNames = [\"exerciseId\", \"userId\"])])"
+    fields:
+      id:
+        type: String
+        mutability: val
+        default: "IdGenerator.generate(\"sub\")"
+        annotations:
+          - "@Id"
+          - "@Column(length = 30)"
+      exercise:
+        type: Exercise
+        mutability: val
+        annotations:
+          - "@ManyToOne(fetch = FetchType.LAZY)"
+          - "@JoinColumn(name = \"exerciseId\", nullable = false)"
+      user:
+        type: User
+        mutability: val
+        annotations:
+          - "@ManyToOne(fetch = FetchType.LAZY)"
+          - "@JoinColumn(name = \"userId\", nullable = false)"
+      status:
+        type: SubmissionStatus
+        mutability: var
+        default: SubmissionStatus.DRAFT
+        annotations:
+          - "@Enumerated(EnumType.STRING)"
+          - "@Column(nullable = false, length = 50)"
+      createdAt:
+        type: Long
+        mutability: val
+        default: Instant.now().toEpochMilli()
+      updatedAt:
+        type: Long
+        mutability: var
+        default: Instant.now().toEpochMilli()
+      submittedAt:
+        type: Long?
+        mutability: var
+        default: "null"
+      approvedAt:
+        type: Long?
+        mutability: var
+        default: "null"
+    methods:
+      submit:
+        description: "Requires DRAFT or NEEDS_REVISION. Sets status=SUBMITTED. Sets submittedAt only if null (preserved on resubmission)."
+      approve:
+        description: "Requires SUBMITTED. Sets status=APPROVED. Sets approvedAt=now."
+      requestRevision:
+        description: "Requires SUBMITTED. Sets status=NEEDS_REVISION."
+      isDraft:
+        returns: Boolean
+      isSubmitted:
+        returns: Boolean
+      isApproved:
+        returns: Boolean
+      needsRevision:
+        returns: Boolean
+      preUpdate:
+        annotation: "@PreUpdate"
+        body: "updatedAt = Instant.now().toEpochMilli()"
+
+  StudentAnswer:
+    package: com.example.lib4gz.exercise.model.entity
+    file: Exercise.kt
+    table: student_answers
+    notes:
+      - "In same file as Submission"
+    annotations:
+      - "@Entity"
+      - "@Table(name = \"student_answers\")"
+    fields:
+      id:
+        type: String
+        mutability: val
+        default: "IdGenerator.generate(\"ans\")"
+        annotations:
+          - "@Id"
+          - "@Column(length = 30)"
+      question:
+        type: Question
+        mutability: val
+        annotations:
+          - "@ManyToOne(fetch = FetchType.LAZY)"
+          - "@JoinColumn(name = \"questionId\", nullable = false)"
+      submission:
+        type: Submission
+        mutability: val
+        annotations:
+          - "@ManyToOne(fetch = FetchType.LAZY)"
+          - "@JoinColumn(name = \"submissionId\", nullable = false)"
+      answer:
+        type: String?
+        mutability: var
+        default: "null"
+        annotations:
+          - "@Column(columnDefinition = \"TEXT\")"
+      teacherComment:
+        type: String?
+        mutability: var
+        default: "null"
+        annotations:
+          - "@Column(columnDefinition = \"TEXT\")"
+      createdAt:
+        type: Long
+        mutability: val
+        default: Instant.now().toEpochMilli()
+      updatedAt:
+        type: Long
+        mutability: var
+        default: Instant.now().toEpochMilli()
+    methods:
+      preUpdate:
+        annotation: "@PreUpdate"
+        body: "updatedAt = Instant.now().toEpochMilli()"
+
+schemas:
+  CreateSubmissionRequest:
+    package: com.example.lib4gz.exercise.model.payload
+    file: SubmissionPayload.kt
+    type: object
+    properties:
+      answers:
+        type: array
+        items:
+          $ref: "#/schemas/AnswerRequest"
+        default: []
+
+  UpdateSubmissionRequest:
+    package: com.example.lib4gz.exercise.model.payload
+    file: SubmissionPayload.kt
+    type: object
+    required:
+      - answers
+    properties:
+      answers:
+        type: array
+        items:
+          $ref: "#/schemas/AnswerRequest"
+
+  AnswerRequest:
+    package: com.example.lib4gz.exercise.model.payload
+    file: SubmissionPayload.kt
+    type: object
+    required:
+      - questionId
+    properties:
+      questionId:
+        type: string
+        format: typeid
+      answer:
+        type: [string, "null"]
+
+  SubmissionResponse:
+    package: com.example.lib4gz.exercise.model.payload
+    file: SubmissionPayload.kt
+    type: object
+    properties:
+      id:
+        type: string
+        format: typeid
+      exerciseId:
+        type: string
+        format: typeid
+      user:
+        $ref: "course.yaml#/schemas/UserSummary"
+      status:
+        $ref: "#/enums/SubmissionStatus"
+      answers:
+        type: [array, "null"]
+        items:
+          $ref: "#/schemas/StudentAnswerResponse"
+      createdAt:
+        type: integer
+        format: int64
+      updatedAt:
+        type: integer
+        format: int64
+      submittedAt:
+        type: [integer, "null"]
+        format: int64
+      approvedAt:
+        type: [integer, "null"]
+        format: int64
+
+  StudentAnswerResponse:
+    package: com.example.lib4gz.exercise.model.payload
+    file: SubmissionPayload.kt
+    type: object
+    properties:
+      id:
+        type: string
+        format: typeid
+      questionId:
+        type: string
+        format: typeid
+      questionContent:
+        type: string
+        description: "Populated from Question entity via questions map lookup"
+      answer:
+        type: [string, "null"]
+      teacherComment:
+        type: [string, "null"]
+      createdAt:
+        type: integer
+        format: int64
+      updatedAt:
+        type: integer
+        format: int64
+
+  # Defined in SubmissionController.kt, NOT in payload file
+  RevisionRequest:
+    package: com.example.lib4gz.exercise.controller
+    file: SubmissionController.kt
+    description: "Defined IN the controller file, not in a payload file"
+    type: object
+    properties:
+      feedback:
+        type: [string, "null"]
+
+  CommentRequest:
+    package: com.example.lib4gz.exercise.controller
+    file: SubmissionController.kt
+    description: "Defined IN the controller file, not in a payload file"
+    type: object
+    required:
+      - comment
+    properties:
+      comment:
+        type: string
+
+mapper:
+  SubmissionMapper:
+    package: com.example.lib4gz.exercise.model.mapper
+    file: ExerciseMapper.kt
+    pattern: component-class
+    annotation: "@Component"
+    notes:
+      - "In shared ExerciseMapper.kt file with ExerciseMapper and QuestionMapper"
+      - "Uses CourseMapper.toUserSummary() for user field"
+      - "Maps questionContent from questions map using answer.question.id as key"
+    methods:
+      toResponse:
+        signature: "fun toResponse(submission: Submission, answers: List<StudentAnswer>? = null, questions: Map<String, Question>? = null): SubmissionResponse"
+        mapping:
+          id: submission.id
+          exerciseId: submission.exercise.id
+          user: "CourseMapper.toUserSummary(submission.user)"
+          status: submission.status
+          answers: "answers?.map { StudentAnswerResponse with questionContent from questions map }"
+          createdAt: submission.createdAt
+          updatedAt: submission.updatedAt
+          submittedAt: submission.submittedAt
+          approvedAt: submission.approvedAt

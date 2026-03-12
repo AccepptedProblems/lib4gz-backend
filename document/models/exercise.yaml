@@ -1,0 +1,180 @@
+---
+metadata:
+  feature: exercise
+  description: Exercise models - Exercise entity, exercise DTOs, and mapper
+  source_files:
+    entity: src/main/kotlin/com/example/lib4gz/exercise/model/entity/Exercise.kt
+    payload: src/main/kotlin/com/example/lib4gz/exercise/model/payload/ExercisePayload.kt
+    mapper: src/main/kotlin/com/example/lib4gz/exercise/model/mapper/ExerciseMapper.kt
+
+enums:
+  ExerciseType:
+    package: com.example.lib4gz.exercise.model.entity
+    file: Exercise.kt
+    values:
+      - TEXT_ANSWER
+      - CODE
+      - FILE_UPLOAD
+      - MULTIPLE_CHOICE
+      - PROJECT_LINK
+
+entity:
+  Exercise:
+    package: com.example.lib4gz.exercise.model.entity
+    file: Exercise.kt
+    table: exercises
+    notes:
+      - "Shared entity file with Question, Submission, StudentAnswer"
+    annotations:
+      - "@Entity"
+      - "@Table(name = \"exercises\", uniqueConstraints = [UniqueConstraint(columnNames = [\"lessonId\", \"orderIndex\"])])"
+      - "@SQLDelete(sql = \"UPDATE exercises SET deleted_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint WHERE id = ?\")"
+      - "@Where(clause = \"deleted_at IS NULL\")"
+    fields:
+      id:
+        type: String
+        mutability: val
+        default: "IdGenerator.generate(\"exc\")"
+        annotations:
+          - "@Id"
+          - "@Column(length = 30)"
+      lesson:
+        type: Lesson
+        mutability: val
+        annotations:
+          - "@ManyToOne(fetch = FetchType.LAZY)"
+          - "@JoinColumn(name = \"lessonId\", nullable = false)"
+      title:
+        type: String
+        mutability: var
+        annotations:
+          - "@Column(nullable = false, length = 500)"
+      type:
+        type: ExerciseType
+        mutability: var
+        annotations:
+          - "@Enumerated(EnumType.STRING)"
+          - "@Column(nullable = false, length = 50)"
+      settings:
+        type: Map<String, Any>
+        mutability: var
+        default: emptyMap()
+        annotations:
+          - "@JdbcTypeCode(SqlTypes.JSON)"
+          - "@Column(columnDefinition = \"jsonb\")"
+      orderIndex:
+        type: Int
+        mutability: var
+        annotations:
+          - "@Column(nullable = false)"
+      createdAt:
+        type: Long
+        mutability: val
+        default: Instant.now().toEpochMilli()
+        annotations:
+          - "@Column(nullable = false, updatable = false)"
+      updatedAt:
+        type: Long
+        mutability: var
+        default: Instant.now().toEpochMilli()
+        annotations:
+          - "@Column(nullable = false)"
+      deletedAt:
+        type: Long?
+        mutability: var
+        default: "null"
+    methods:
+      preUpdate:
+        annotation: "@PreUpdate"
+        body: "updatedAt = Instant.now().toEpochMilli()"
+
+schemas:
+  CreateExerciseRequest:
+    package: com.example.lib4gz.exercise.model.payload
+    file: ExercisePayload.kt
+    type: object
+    required:
+      - title
+      - type
+    properties:
+      title:
+        type: string
+      type:
+        $ref: "#/enums/ExerciseType"
+      settings:
+        type: object
+        default: {}
+      orderIndex:
+        type: [integer, "null"]
+      questions:
+        type: array
+        items:
+          $ref: "question.yaml#/schemas/CreateQuestionItem"
+        default: []
+        description: "Optional inline questions to create with the exercise"
+
+  UpdateExerciseRequest:
+    package: com.example.lib4gz.exercise.model.payload
+    file: ExercisePayload.kt
+    type: object
+    properties:
+      title:
+        type: [string, "null"]
+      type:
+        oneOf:
+          - $ref: "#/enums/ExerciseType"
+          - type: "null"
+      settings:
+        type: [object, "null"]
+      orderIndex:
+        type: [integer, "null"]
+
+  ExerciseResponse:
+    package: com.example.lib4gz.exercise.model.payload
+    file: ExercisePayload.kt
+    type: object
+    properties:
+      id:
+        type: string
+        format: typeid
+      lessonId:
+        type: string
+        format: typeid
+      title:
+        type: string
+      type:
+        $ref: "#/enums/ExerciseType"
+      settings:
+        type: object
+      orderIndex:
+        type: integer
+      questionCount:
+        type: [integer, "null"]
+      createdAt:
+        type: integer
+        format: int64
+      updatedAt:
+        type: integer
+        format: int64
+
+mapper:
+  ExerciseMapper:
+    package: com.example.lib4gz.exercise.model.mapper
+    file: ExerciseMapper.kt
+    pattern: component-class
+    annotation: "@Component"
+    notes:
+      - "Shared file also containing QuestionMapper and SubmissionMapper"
+    methods:
+      toResponse:
+        signature: "fun toResponse(exercise: Exercise, questionCount: Int? = null): ExerciseResponse"
+        mapping:
+          id: exercise.id
+          lessonId: exercise.lesson.id
+          title: exercise.title
+          type: exercise.type
+          settings: exercise.settings
+          orderIndex: exercise.orderIndex
+          questionCount: questionCount
+          createdAt: exercise.createdAt
+          updatedAt: exercise.updatedAt

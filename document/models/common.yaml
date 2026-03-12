@@ -1,0 +1,252 @@
+---
+metadata:
+  feature: common
+  description: Shared infrastructure models - error handling and security configuration
+  source_files:
+    error_response: src/main/kotlin/com/example/lib4gz/common/config/error/ErrorResp.kt
+    exceptions:
+      - src/main/kotlin/com/example/lib4gz/common/exception/BusinessException.kt
+      - src/main/kotlin/com/example/lib4gz/common/exception/BadRequestException.kt
+      - src/main/kotlin/com/example/lib4gz/common/exception/ResourceNotFoundException.kt
+      - src/main/kotlin/com/example/lib4gz/common/exception/UnauthorizedException.kt
+      - src/main/kotlin/com/example/lib4gz/common/exception/ValidationException.kt
+    security_entities: src/main/kotlin/com/example/lib4gz/common/config/security/loader/Entity.kt
+    id_generator: src/main/kotlin/com/example/lib4gz/common/utils/IdGenerator.kt
+
+# --- Error Handling Models ---
+
+error_models:
+  ErrorResp:
+    package: com.example.lib4gz.common.config.error
+    file: ErrorResp.kt
+    type: object
+    description: "Standard error response wrapper"
+    constructor_properties:
+      timestamp:
+        type: Long
+        default: "0"
+      path:
+        type: String?
+      status:
+        type: HttpStatus?
+      requestId:
+        type: String?
+      traceId:
+        type: String?
+    body_properties:
+      errors:
+        type: MutableList<ApiError>
+        default: ArrayList()
+    methods:
+      addError:
+        parameters: "error: ApiError"
+
+  ApiError:
+    package: com.example.lib4gz.common.config.error
+    file: ErrorResp.kt
+    type: interface
+    description: "Jackson polymorphic interface for error types"
+    annotations:
+      - "@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = \"type\")"
+      - "@JsonSubTypes(JsonSubTypes.Type(value = InputError::class, name = \"InputError\"), JsonSubTypes.Type(value = GenericError::class, name = \"SystemError\"))"
+
+  InputError:
+    package: com.example.lib4gz.common.config.error
+    file: ErrorResp.kt
+    type: object
+    implements: ApiError
+    properties:
+      field:
+        type: [string, "null"]
+      message:
+        type: [string, "null"]
+
+  GenericError:
+    package: com.example.lib4gz.common.config.error
+    file: ErrorResp.kt
+    type: object
+    implements: ApiError
+    properties:
+      reason:
+        type: [string, "null"]
+
+exceptions:
+  description: "All extend RuntimeException directly (NOT hierarchical). Each in its own file."
+  package: com.example.lib4gz.common.exception
+  classes:
+    BusinessException:
+      file: BusinessException.kt
+      extends: RuntimeException
+      constructor: "message: String"
+    BadRequestException:
+      file: BadRequestException.kt
+      extends: RuntimeException
+      constructor: "message: String"
+    ResourceNotFoundException:
+      file: ResourceNotFoundException.kt
+      extends: RuntimeException
+      constructor: "message: String"
+    UnauthorizedException:
+      file: UnauthorizedException.kt
+      extends: RuntimeException
+      constructor: "message: String"
+    ValidationException:
+      file: ValidationException.kt
+      extends: RuntimeException
+      constructor: "message: String"
+
+# --- Security Configuration Models ---
+
+security_models:
+  SecurityConfigProperties:
+    package: com.example.lib4gz.common.config.security.loader
+    file: Entity.kt
+    type: object
+    properties:
+      permittedEndpoints:
+        type: array
+        items:
+          type: string
+        default: []
+      authorizedEndpoints:
+        type: array
+        items:
+          $ref: "#/security_models/AuthorizedEndpoint"
+        default: []
+      cors:
+        $ref: "#/security_models/CorsConfig"
+
+  AuthorizedEndpoint:
+    package: com.example.lib4gz.common.config.security.loader
+    file: Entity.kt
+    type: object
+    properties:
+      endpoint:
+        type: string
+      roles:
+        type: array
+        items:
+          type: string
+
+  CorsConfig:
+    package: com.example.lib4gz.common.config.security.loader
+    file: Entity.kt
+    type: object
+    properties:
+      allowedOrigins:
+        type: array
+        items:
+          type: string
+        default: []
+      allowedMethods:
+        type: array
+        items:
+          type: string
+        default: []
+      allowedHeaders:
+        type: array
+        items:
+          type: string
+        default: []
+      allowCredentials:
+        type: boolean
+        default: true
+      maxAge:
+        type: integer
+        format: int64
+        default: 3600
+
+# --- OpenAPI Error Schemas (for API spec references) ---
+
+schemas:
+  ErrorResp:
+    type: object
+    properties:
+      timestamp:
+        type: integer
+        format: int64
+      path:
+        type: [string, "null"]
+      status:
+        type: integer
+      requestId:
+        type: [string, "null"]
+      traceId:
+        type: [string, "null"]
+      errors:
+        type: array
+        items:
+          $ref: "#/schemas/ApiError"
+
+  ApiError:
+    type: object
+    discriminator:
+      propertyName: type
+      mapping:
+        InputError: "#/schemas/InputError"
+        SystemError: "#/schemas/GenericError"
+    required:
+      - type
+    properties:
+      type:
+        type: string
+
+  InputError:
+    allOf:
+      - $ref: "#/schemas/ApiError"
+      - type: object
+        properties:
+          field:
+            type: [string, "null"]
+          message:
+            type: [string, "null"]
+
+  GenericError:
+    allOf:
+      - $ref: "#/schemas/ApiError"
+      - type: object
+        properties:
+          reason:
+            type: [string, "null"]
+
+# --- ID Generation Utility ---
+
+utilities:
+  IdGenerator:
+    package: com.example.lib4gz.common.utils
+    file: IdGenerator.kt
+    description: "TypeID generator — produces type-prefixed, time-sortable identifiers based on UUIDv7 with Crockford Base32 encoding"
+    dependencies:
+      - "com.github.f4b6a3:uuid-creator:6.0.0"
+    format:
+      pattern: "{prefix}_{base32_uuidv7}"
+      total_length: 30
+      prefix_length: 3
+      separator: "_"
+      suffix_length: 26
+      suffix_encoding: "Crockford Base32"
+      uuid_version: "UUIDv7 (time-ordered epoch)"
+      example: "usr_01h455vb4pex5vsknk084sn02q"
+    entity_prefixes:
+      User: usr
+      Course: crs
+      Enrollment: enr
+      Module: mod
+      Lesson: les
+      Summary: sum
+      Exercise: exc
+      Question: qst
+      Submission: sub
+      StudentAnswer: ans
+    methods:
+      generate:
+        signature: "fun generate(prefix: String): String"
+        description: "Generates a TypeID with the given entity prefix"
+        returns: "String — 30-char TypeID (e.g., usr_01h455vb4pex5vsknk084sn02q)"
+        implementation:
+          - "Generate UUIDv7 via UuidCreator.getTimeOrderedEpoch()"
+          - "Extract 128-bit UUID bytes"
+          - "Encode bytes as 26-char Crockford Base32 string"
+          - "Return \"{prefix}_{base32}\""
+    source_files:
+      utility: src/main/kotlin/com/example/lib4gz/common/utils/IdGenerator.kt

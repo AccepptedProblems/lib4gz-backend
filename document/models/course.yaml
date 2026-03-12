@@ -1,0 +1,224 @@
+---
+metadata:
+  feature: course
+  description: Course models - Course entity, course DTOs, UserSummary, and mapper
+  source_files:
+    entity: src/main/kotlin/com/example/lib4gz/courses/model/entity/Courses.kt
+    payload: src/main/kotlin/com/example/lib4gz/courses/model/payload/CoursePayload.kt
+    mapper: src/main/kotlin/com/example/lib4gz/courses/model/mapper/CourseMapper.kt
+
+enums:
+  Visibility:
+    package: com.example.lib4gz.courses.model.entity
+    file: Courses.kt
+    values:
+      - PUBLIC
+      - PRIVATE
+      - UNLISTED
+
+entity:
+  Course:
+    package: com.example.lib4gz.courses.model.entity
+    file: Courses.kt
+    table: courses
+    notes:
+      - "Shared entity file containing Course, Enrollment, Module, Lesson, Summary"
+    annotations:
+      - "@Entity"
+      - "@Table(name = \"courses\")"
+      - "@SQLDelete(sql = \"UPDATE courses SET deleted_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint WHERE id = ?\")"
+      - "@Where(clause = \"deleted_at IS NULL\")"
+    fields:
+      id:
+        type: String
+        mutability: val
+        default: "IdGenerator.generate(\"crs\")"
+        annotations:
+          - "@Id"
+          - "@Column(length = 50)"
+      code:
+        type: String
+        mutability: val
+        default: "IdGenerator.generateNumericCode(10)"
+        annotations:
+          - "@Column(nullable = false, unique = true, length = 10)"
+      title:
+        type: String
+        mutability: var
+        annotations:
+          - "@Column(nullable = false, length = 500)"
+      description:
+        type: String?
+        mutability: var
+        default: "null"
+        annotations:
+          - "@Column(columnDefinition = \"TEXT\")"
+      visibility:
+        type: Visibility
+        mutability: var
+        default: Visibility.PRIVATE
+        annotations:
+          - "@Enumerated(EnumType.STRING)"
+          - "@Column(nullable = false, length = 50)"
+      createdBy:
+        type: User
+        mutability: val
+        annotations:
+          - "@ManyToOne(fetch = FetchType.LAZY)"
+          - "@JoinColumn(name = \"createdBy\", nullable = false)"
+      modules:
+        type: MutableList<Module>
+        mutability: val
+        default: mutableListOf()
+        annotations:
+          - "@OneToMany(mappedBy = \"course\", cascade = [CascadeType.ALL], orphanRemoval = true)"
+          - "@Where(clause = \"deleted_at IS NULL\")"
+      enrollments:
+        type: MutableList<Enrollment>
+        mutability: val
+        default: mutableListOf()
+        annotations:
+          - "@OneToMany(mappedBy = \"course\", cascade = [CascadeType.ALL], orphanRemoval = true)"
+      settings:
+        type: Map<String, Any>
+        mutability: var
+        default: emptyMap()
+        annotations:
+          - "@JdbcTypeCode(SqlTypes.JSON)"
+          - "@Column(columnDefinition = \"jsonb\")"
+      createdAt:
+        type: Long
+        mutability: val
+        default: Instant.now().toEpochMilli()
+        annotations:
+          - "@Column(nullable = false, updatable = false)"
+      updatedAt:
+        type: Long
+        mutability: var
+        default: Instant.now().toEpochMilli()
+        annotations:
+          - "@Column(nullable = false)"
+      deletedAt:
+        type: Long?
+        mutability: var
+        default: "null"
+    methods:
+      preUpdate:
+        annotation: "@PreUpdate"
+        body: "updatedAt = Instant.now().toEpochMilli()"
+
+schemas:
+  CreateCourseRequest:
+    package: com.example.lib4gz.courses.model.payload
+    file: CoursePayload.kt
+    type: object
+    required:
+      - title
+    properties:
+      title:
+        type: string
+      description:
+        type: [string, "null"]
+      visibility:
+        $ref: "#/enums/Visibility"
+        default: PRIVATE
+      settings:
+        type: object
+        default: {}
+
+  UpdateCourseRequest:
+    package: com.example.lib4gz.courses.model.payload
+    file: CoursePayload.kt
+    type: object
+    properties:
+      title:
+        type: [string, "null"]
+      description:
+        type: [string, "null"]
+      visibility:
+        oneOf:
+          - $ref: "#/enums/Visibility"
+          - type: "null"
+      settings:
+        type: [object, "null"]
+
+  CourseResponse:
+    package: com.example.lib4gz.courses.model.payload
+    file: CoursePayload.kt
+    type: object
+    properties:
+      id:
+        type: string
+        format: typeid
+      code:
+        type: string
+        description: "10-digit numeric code, unique per course"
+      title:
+        type: string
+      description:
+        type: [string, "null"]
+      visibility:
+        $ref: "#/enums/Visibility"
+      createdBy:
+        $ref: "#/schemas/UserSummary"
+      settings:
+        type: object
+      createdAt:
+        type: integer
+        format: int64
+      updatedAt:
+        type: integer
+        format: int64
+      moduleCount:
+        type: [integer, "null"]
+      enrollmentCount:
+        type: [integer, "null"]
+
+  UserSummary:
+    package: com.example.lib4gz.courses.model.payload
+    file: CoursePayload.kt
+    description: Shared DTO used across multiple features for user references
+    type: object
+    properties:
+      id:
+        type: string
+        format: typeid
+      name:
+        type: string
+      email:
+        type: string
+      avatarUrl:
+        type: [string, "null"]
+
+mapper:
+  CourseMapper:
+    package: com.example.lib4gz.courses.model.mapper
+    file: CourseMapper.kt
+    pattern: component-class
+    annotation: "@Component"
+    notes:
+      - "Shared file also containing EnrollmentMapper and other course-related mappers"
+    methods:
+      toResponse:
+        signature: "fun toResponse(course: Course, moduleCount: Int? = null, enrollmentCount: Int? = null): CourseResponse"
+        mapping:
+          id: course.id
+          code: course.code
+          title: course.title
+          description: course.description
+          visibility: course.visibility
+          createdBy: "toUserSummary(course.createdBy)"
+          settings: course.settings
+          createdAt: course.createdAt
+          updatedAt: course.updatedAt
+          moduleCount: moduleCount
+          enrollmentCount: enrollmentCount
+    companion_methods:
+      toUserSummary:
+        signature: "fun toUserSummary(user: User): UserSummary"
+        description: "Static method in companion object, called by other mappers"
+        mapping:
+          id: user.id
+          name: user.name
+          email: user.email
+          avatarUrl: user.avatarUrl

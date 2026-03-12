@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(tree:*)",
+      "Bash(mkdir:*)",
+      "Bash(./gradlew build:*)",
+      "Bash(./gradlew classes testClasses:*)",
+      "Bash(./gradlew classes:*)",
+      "Bash(./gradlew compileKotlin 2>&1 | tail -10)",
+      "Bash(./gradlew compileKotlin 2>&1 | tail -20)",
+      "Bash(./gradlew compileKotlin 2>&1 | tail -50)",
+      "Bash(./gradlew clean build 2>&1 | tail -80)",
+      "Bash(./gradlew compileKotlin compileTestKotlin 2>&1 | grep -E \"BUILD|FAIL|ERROR|error:\")",
+      "Bash(grep -r \"fk\\\\|FK\\\\|foreign\" /Users/namnguyen/Desktop/w4gz/lib4gz-project/lib4gz/src/main/kotlin --include=\"*.kt\" 2>/dev/null | head -20)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

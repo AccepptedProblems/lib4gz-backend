@@ -1,0 +1,143 @@
+---
+metadata:
+  feature: lesson
+  description: Lesson models - Lesson entity, lesson DTOs, and mapper
+  source_files:
+    entity: src/main/kotlin/com/example/lib4gz/courses/model/entity/Courses.kt
+    payload: src/main/kotlin/com/example/lib4gz/courses/model/payload/LessonPayload.kt
+    mapper: src/main/kotlin/com/example/lib4gz/courses/model/mapper/CourseMapper.kt
+
+entity:
+  Lesson:
+    package: com.example.lib4gz.courses.model.entity
+    file: Courses.kt
+    table: lessons
+    notes:
+      - "Shared entity file with Course, Enrollment, Module, Summary"
+    annotations:
+      - "@Entity"
+      - "@Table(name = \"lessons\", uniqueConstraints = [UniqueConstraint(columnNames = [\"moduleId\", \"orderIndex\"])])"
+      - "@SQLDelete(sql = \"UPDATE lessons SET deleted_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint WHERE id = ?\")"
+      - "@Where(clause = \"deleted_at IS NULL\")"
+    fields:
+      id:
+        type: String
+        mutability: val
+        default: "IdGenerator.generate(\"les\")"
+        annotations:
+          - "@Id"
+          - "@Column(length = 30)"
+      module:
+        type: Module
+        mutability: val
+        annotations:
+          - "@ManyToOne(fetch = FetchType.LAZY)"
+          - "@JoinColumn(name = \"moduleId\", nullable = false)"
+      title:
+        type: String
+        mutability: var
+        annotations:
+          - "@Column(nullable = false, length = 500)"
+      orderIndex:
+        type: Int
+        mutability: var
+        annotations:
+          - "@Column(nullable = false)"
+      summary:
+        type: Summary?
+        mutability: var
+        default: "null"
+        annotations:
+          - "@OneToOne(mappedBy = \"lesson\", cascade = [CascadeType.ALL], orphanRemoval = true)"
+      createdAt:
+        type: Long
+        mutability: val
+        default: Instant.now().toEpochMilli()
+        annotations:
+          - "@Column(nullable = false, updatable = false)"
+      updatedAt:
+        type: Long
+        mutability: var
+        default: Instant.now().toEpochMilli()
+        annotations:
+          - "@Column(nullable = false)"
+      deletedAt:
+        type: Long?
+        mutability: var
+        default: "null"
+    methods:
+      preUpdate:
+        annotation: "@PreUpdate"
+        body: "updatedAt = Instant.now().toEpochMilli()"
+
+schemas:
+  CreateLessonRequest:
+    package: com.example.lib4gz.courses.model.payload
+    file: LessonPayload.kt
+    type: object
+    required:
+      - title
+    properties:
+      title:
+        type: string
+      orderIndex:
+        type: [integer, "null"]
+
+  UpdateLessonRequest:
+    package: com.example.lib4gz.courses.model.payload
+    file: LessonPayload.kt
+    type: object
+    properties:
+      title:
+        type: [string, "null"]
+      orderIndex:
+        type: [integer, "null"]
+
+  LessonResponse:
+    package: com.example.lib4gz.courses.model.payload
+    file: LessonPayload.kt
+    type: object
+    properties:
+      id:
+        type: string
+        format: typeid
+      moduleId:
+        type: string
+        format: typeid
+      title:
+        type: string
+      orderIndex:
+        type: integer
+      hasSummary:
+        type: boolean
+        description: "Computed field: lesson.summary != null"
+      exerciseCount:
+        type: [integer, "null"]
+        description: "Computed from exerciseRepo.countByLesson_Id()"
+      createdAt:
+        type: integer
+        format: int64
+      updatedAt:
+        type: integer
+        format: int64
+
+mapper:
+  LessonMapper:
+    package: com.example.lib4gz.courses.model.mapper
+    file: CourseMapper.kt
+    pattern: component-class
+    annotation: "@Component"
+    notes:
+      - "In shared CourseMapper.kt file"
+    methods:
+      toResponse:
+        signature: "fun toResponse(lesson: Lesson, hasSummary: Boolean, exerciseCount: Int? = null): LessonResponse"
+        mapping:
+          id: lesson.id
+          moduleId: lesson.module.id
+          title: lesson.title
+          orderIndex: lesson.orderIndex
+          hasSummary: hasSummary
+          exerciseCount: exerciseCount
+          createdAt: lesson.createdAt
+          updatedAt: lesson.updatedAt
