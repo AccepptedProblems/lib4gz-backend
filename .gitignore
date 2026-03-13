@@ -38,3 +38,6 @@ out/
 
 ### Kotlin ###
 .kotlin
+
+### Deploy scripts (contains project config) ###
+deploy/
