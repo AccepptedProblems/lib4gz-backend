@@ -25,3 +25,14 @@ data class EnrollmentResponse(
     val createdAt: Long,
     val updatedAt: Long
 )
+
+/**
+ * Lightweight enrollment view embedded in CourseResponse / SyllabusResponse
+ * to identify the caller's relationship to the course without a separate request.
+ */
+data class EnrollmentSummary(
+    val id: String,
+    val role: EnrollmentRole,
+    val status: EnrollmentStatus,
+    val joinedAt: Long?
+)

@@ -20,4 +20,9 @@ interface QuestionRepo : JpaRepository<Question, String> {
     fun countByExerciseId(exerciseId: String): Long
 
     fun findByExerciseIdAndVisibility(exerciseId: String, visibility: com.example.lib4gz.exercise.model.entity.QuestionVisibility): List<Question>
+
+    /**
+     * Batched fetch for aggregate endpoints to avoid N+1 fan-out across many exercises.
+     */
+    fun findByExerciseIdInOrderByOrderIndexAsc(exerciseIds: Collection<String>): List<Question>
 }

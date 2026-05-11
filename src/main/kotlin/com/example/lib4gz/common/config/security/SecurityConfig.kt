@@ -29,7 +29,7 @@ class SecurityConfig(
 
         http
             .csrf { obj -> obj.disable() }
-            .cors {}
+            .cors { it.configurationSource(corsConfigurationSource()) }
             .authorizeHttpRequests { req ->
                 // Apply whitelist URLs
                 req.requestMatchers(*config.permittedEndpoints.toTypedArray()).permitAll()

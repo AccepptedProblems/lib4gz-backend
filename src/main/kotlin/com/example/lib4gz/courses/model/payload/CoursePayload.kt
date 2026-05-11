@@ -29,7 +29,10 @@ data class CourseResponse(
     val createdAt: Long,
     val updatedAt: Long,
     val moduleCount: Int? = null,
-    val enrollmentCount: Int? = null
+    val enrollmentCount: Int? = null,
+    // Denormalized: the caller's enrollment (null when unenrolled or anonymous).
+    // Eliminates the separate GET /courses/{id}/my-enrollment round-trip.
+    val myEnrollment: EnrollmentSummary? = null
 )
 
 data class UserSummary(

@@ -1,6 +1,7 @@
 package com.example.lib4gz.exercise.controller
 
 import com.example.lib4gz.common.config.common.PZRequestHeader
+import com.example.lib4gz.common.utils.ExpandTokens
 import com.example.lib4gz.exercise.model.payload.CreateExerciseRequest
 import com.example.lib4gz.exercise.model.payload.ExerciseResponse
 import com.example.lib4gz.exercise.model.payload.UpdateExerciseRequest
@@ -26,20 +27,29 @@ class ExerciseController(
         return exerciseService.createExercise(lessonId, userId, createRequest)
     }
 
+    /**
+     * GET /lessons/{id}/exercises?expand=questions,mySubmission
+     *
+     * Powers the Exercise Attempt screen in one round-trip. Without `expand`, the
+     * response is the legacy shape plus the denormalized `mySubmissionStatus` and
+     * `mySubmissionId` on each row.
+     */
     @GetMapping("/lessons/{lessonId}/exercises")
     fun listLessonExercises(
         @PathVariable lessonId: String,
+        @RequestParam(required = false) expand: String?,
         @RequestHeader(PZRequestHeader.USER_ID) userId: String
     ): Flux<ExerciseResponse> {
-        return exerciseService.listLessonExercises(lessonId, userId)
+        return exerciseService.listLessonExercises(lessonId, userId, ExpandTokens.parse(expand))
     }
 
     @GetMapping("/exercises/{exerciseId}")
     fun getExercise(
         @PathVariable exerciseId: String,
+        @RequestParam(required = false) expand: String?,
         @RequestHeader(PZRequestHeader.USER_ID) userId: String
     ): Mono<ExerciseResponse> {
-        return exerciseService.getExerciseById(exerciseId, userId)
+        return exerciseService.getExerciseById(exerciseId, userId, ExpandTokens.parse(expand))
     }
 
     @PatchMapping("/exercises/{exerciseId}")

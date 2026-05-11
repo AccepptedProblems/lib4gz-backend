@@ -11,9 +11,11 @@ import com.example.lib4gz.courses.model.entity.EnrollmentRole
 import com.example.lib4gz.courses.model.entity.EnrollmentStatus
 import com.example.lib4gz.courses.model.entity.Visibility
 import com.example.lib4gz.courses.model.mapper.CourseMapper
+import com.example.lib4gz.courses.model.mapper.EnrollmentMapper
 import com.example.lib4gz.courses.model.payload.CreateCourseRequest
 import com.example.lib4gz.courses.model.payload.UpdateCourseRequest
 import com.example.lib4gz.courses.model.payload.CourseResponse
+import com.example.lib4gz.courses.model.payload.EnrollmentSummary
 import com.example.lib4gz.courses.repo.CourseRepo
 import com.example.lib4gz.courses.repo.EnrollmentRepo
 import com.example.lib4gz.courses.repo.ModuleRepo
@@ -49,7 +51,8 @@ class CourseServiceImpl(
     private val courseRepo: CourseRepo,
     private val userRepo: UserRepo,
     private val enrollmentRepo: EnrollmentRepo,
-    private val moduleRepo: ModuleRepo
+    private val moduleRepo: ModuleRepo,
+    private val enrollmentMapper: EnrollmentMapper
 ) : CourseService {
 
     override fun createCourse(userId: String, request: CreateCourseRequest): Mono<CourseResponse> {
@@ -72,16 +75,17 @@ class CourseServiceImpl(
 
             val savedCourse = courseRepo.save(course)
 
-            createFirstEnrollment(savedCourse, user)
-
-            CourseMapper.toResponse(savedCourse)
+            val teacherEnrollment = createFirstEnrollment(savedCourse, user)
+            CourseMapper.toResponse(
+                course = savedCourse,
+                moduleCount = 0,
+                enrollmentCount = 1,
+                myEnrollment = enrollmentMapper.toSummary(teacherEnrollment)
+            )
         }.subscribeOn(Schedulers.boundedElastic())
     }
 
-    private fun createFirstEnrollment(
-        savedCourse: Course,
-        user: User
-    ) {
+    private fun createFirstEnrollment(savedCourse: Course, user: User): Enrollment {
         val teacherEnrollment = Enrollment(
             course = savedCourse,
             user = user,
@@ -89,7 +93,7 @@ class CourseServiceImpl(
             status = EnrollmentStatus.ACTIVE,
             joinedAt = Instant.now().toEpochMilli()
         )
-        enrollmentRepo.save(teacherEnrollment)
+        return enrollmentRepo.save(teacherEnrollment)
     }
 
     override fun getCourseById(courseId: String, userId: String): Mono<CourseResponse> {
@@ -98,15 +102,11 @@ class CourseServiceImpl(
                 ResourceNotFoundException("Course not found with id: $courseId")
             }
 
-            // Check if user has access to this course
             if (!hasAccessToCourse(course, userId)) {
                 throw UnauthorizedException("You do not have access to this course")
             }
 
-            val moduleCount = moduleRepo.countByCourse_Id(courseId).toInt()
-            val enrollmentCount = enrollmentRepo.countByCourse_IdAndStatus(courseId, EnrollmentStatus.ACTIVE).toInt()
-
-            CourseMapper.toResponse(course, moduleCount, enrollmentCount)
+            buildCourseResponse(course, userId)
         }.subscribeOn(Schedulers.boundedElastic())
     }
 
@@ -119,10 +119,7 @@ class CourseServiceImpl(
                 throw UnauthorizedException("You do not have access to this course")
             }
 
-            val moduleCount = moduleRepo.countByCourse_Id(course.id).toInt()
-            val enrollmentCount = enrollmentRepo.countByCourse_IdAndStatus(course.id, EnrollmentStatus.ACTIVE).toInt()
-
-            CourseMapper.toResponse(course, moduleCount, enrollmentCount)
+            buildCourseResponse(course, userId)
         }.subscribeOn(Schedulers.boundedElastic())
     }
 
@@ -132,7 +129,6 @@ class CourseServiceImpl(
                 ResourceNotFoundException("Course not found with id: $courseId")
             }
 
-            // Only course creator can update
             if (course.createdBy.id != userId) {
                 throw UnauthorizedException("Only the course creator can update the course")
             }
@@ -143,7 +139,7 @@ class CourseServiceImpl(
             request.settings?.let { course.settings = it }
 
             val updatedCourse = courseRepo.save(course)
-            CourseMapper.toResponse(updatedCourse)
+            buildCourseResponse(updatedCourse, userId)
         }.subscribeOn(Schedulers.boundedElastic())
     }
 
@@ -153,64 +149,81 @@ class CourseServiceImpl(
                 ResourceNotFoundException("Course not found with id: $courseId")
             }
 
-            // Only course creator can delete
             if (course.createdBy.id != userId) {
                 throw UnauthorizedException("Only the course creator can delete the course")
             }
 
-            // Soft delete is handled by @SQLDelete annotation
             courseRepo.delete(course)
         }.subscribeOn(Schedulers.boundedElastic()).then()
     }
 
     override fun listUserCreatedCourses(userId: String): Flux<CourseResponse> {
         return Mono.fromCallable {
-            courseRepo.findByCreatedBy_Id(userId)
-        }.flatMapMany { courses ->
-            Flux.fromIterable(courses).map { course ->
-                val moduleCount = moduleRepo.countByCourse_Id(course.id).toInt()
-                val enrollmentCount = enrollmentRepo.countByCourse_IdAndStatus(course.id, EnrollmentStatus.ACTIVE).toInt()
-                CourseMapper.toResponse(course, moduleCount, enrollmentCount)
-            }
-        }.subscribeOn(Schedulers.boundedElastic())
+            assembleCourseList(courseRepo.findByCreatedBy_Id(userId), userId)
+        }.flatMapMany { Flux.fromIterable(it) }
+            .subscribeOn(Schedulers.boundedElastic())
     }
 
     override fun listEnrolledCourses(userId: String): Flux<CourseResponse> {
         return Mono.fromCallable {
-            courseRepo.findByEnrolledUser(userId)
-        }.flatMapMany { courses ->
-            Flux.fromIterable(courses).map { course ->
-                val moduleCount = moduleRepo.countByCourse_Id(course.id).toInt()
-                val enrollmentCount = enrollmentRepo.countByCourse_IdAndStatus(course.id, EnrollmentStatus.ACTIVE).toInt()
-                CourseMapper.toResponse(course, moduleCount, enrollmentCount)
-            }
-        }.subscribeOn(Schedulers.boundedElastic())
+            assembleCourseList(courseRepo.findByEnrolledUser(userId), userId)
+        }.flatMapMany { Flux.fromIterable(it) }
+            .subscribeOn(Schedulers.boundedElastic())
     }
 
     override fun listPublicCourses(): Flux<CourseResponse> {
         return Mono.fromCallable {
-            courseRepo.findPublicCourses()
-        }.flatMapMany { courses ->
-            Flux.fromIterable(courses).map { course ->
-                val moduleCount = moduleRepo.countByCourse_Id(course.id).toInt()
-                val enrollmentCount = enrollmentRepo.countByCourse_IdAndStatus(course.id, EnrollmentStatus.ACTIVE).toInt()
-                CourseMapper.toResponse(course, moduleCount, enrollmentCount)
+            // Anonymous public listing: no caller-specific enrollment join.
+            courseRepo.findPublicCourses().map { course ->
+                CourseMapper.toResponse(
+                    course = course,
+                    moduleCount = moduleRepo.countByCourse_Id(course.id).toInt(),
+                    enrollmentCount = enrollmentRepo
+                        .countByCourse_IdAndStatus(course.id, EnrollmentStatus.ACTIVE).toInt(),
+                    myEnrollment = null
+                )
             }
-        }.subscribeOn(Schedulers.boundedElastic())
+        }.flatMapMany { Flux.fromIterable(it) }
+            .subscribeOn(Schedulers.boundedElastic())
+    }
+
+    /**
+     * Builds a single-course response with the caller's enrollment denormalized.
+     */
+    private fun buildCourseResponse(course: Course, userId: String): CourseResponse {
+        val moduleCount = moduleRepo.countByCourse_Id(course.id).toInt()
+        val enrollmentCount = enrollmentRepo
+            .countByCourse_IdAndStatus(course.id, EnrollmentStatus.ACTIVE).toInt()
+        val mySummary = enrollmentRepo.findByCourse_IdAndUser_Id(course.id, userId)
+            ?.let(enrollmentMapper::toSummary)
+        return CourseMapper.toResponse(course, moduleCount, enrollmentCount, mySummary)
+    }
+
+    /**
+     * Batched list assembly. Issues exactly one enrollment query for the caller's
+     * relationship across every course in the list — avoids the per-row lookup.
+     */
+    private fun assembleCourseList(courses: List<Course>, userId: String): List<CourseResponse> {
+        if (courses.isEmpty()) return emptyList()
+        val courseIds = courses.map { it.id }
+        val myEnrollmentsByCourseId: Map<String, EnrollmentSummary> =
+            enrollmentRepo.findByCourse_IdInAndUser_Id(courseIds, userId)
+                .associate { it.course.id to enrollmentMapper.toSummary(it) }
+
+        return courses.map { course ->
+            CourseMapper.toResponse(
+                course = course,
+                moduleCount = moduleRepo.countByCourse_Id(course.id).toInt(),
+                enrollmentCount = enrollmentRepo
+                    .countByCourse_IdAndStatus(course.id, EnrollmentStatus.ACTIVE).toInt(),
+                myEnrollment = myEnrollmentsByCourseId[course.id]
+            )
+        }
     }
 
     private fun hasAccessToCourse(course: Course, userId: String): Boolean {
-        // Course creator has access
-        if (course.createdBy.id == userId) {
-            return true
-        }
-
-        // Public courses are accessible to all
-        if (course.visibility == Visibility.PUBLIC) {
-            return true
-        }
-
-        // Check if user is enrolled with ACTIVE status
+        if (course.createdBy.id == userId) return true
+        if (course.visibility == Visibility.PUBLIC) return true
         val enrollment = enrollmentRepo.findByCourse_IdAndUser_Id(course.id, userId)
         return enrollment?.status == EnrollmentStatus.ACTIVE
     }

@@ -1,7 +1,6 @@
 package com.example.lib4gz.courses.service
 
 import com.example.lib4gz.auth.repo.UserRepo
-import com.example.lib4gz.common.exception.BadRequestException
 import com.example.lib4gz.common.exception.ResourceNotFoundException
 import com.example.lib4gz.common.exception.UnauthorizedException
 import com.example.lib4gz.courses.model.entity.Enrollment
@@ -61,9 +60,10 @@ class EnrollmentServiceImpl(
                 ResourceNotFoundException("User not found with id: $userId")
             }
 
-            // Check if already enrolled
-            if (enrollmentRepo.existsByCourse_IdAndUser_Id(courseId, userId)) {
-                throw BadRequestException("User is already enrolled in this course")
+            // Idempotent: if already enrolled, return existing enrollment
+            val existingEnrollment = enrollmentRepo.findByCourse_IdAndUser_Id(courseId, userId)
+            if (existingEnrollment != null) {
+                return@fromCallable enrollmentMapper.toResponse(existingEnrollment, course.title)
             }
 
             // Course creator automatically becomes TEACHER with ACTIVE status

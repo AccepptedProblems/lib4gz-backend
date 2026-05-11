@@ -106,14 +106,32 @@ class SummaryServiceImpl(
 
     override fun createOrUpdateSummary(lessonId: String, userId: String, content: String): Mono<SummaryResponse> {
         return Mono.fromCallable {
-            summaryRepo.findByLesson_Id(lessonId)
+            val lesson = lessonRepo.findById(lessonId).orElseThrow {
+                ResourceNotFoundException("Lesson not found with id: $lessonId")
+            }
+
+            if (!enrollmentService.isTeacherInCourse(lesson.module.course.id, userId)) {
+                throw UnauthorizedException("Only teachers can create or update summaries")
+            }
+
+            val user = userRepo.findById(userId).orElseThrow {
+                ResourceNotFoundException("User not found with id: $userId")
+            }
+
+            val existingSummary = summaryRepo.findByLesson_Id(lessonId)
+            if (existingSummary != null) {
+                existingSummary.content = content
+                existingSummary.editedBy = user
+                existingSummary.version += 1
+                summaryMapper.toResponse(summaryRepo.save(existingSummary))
+            } else {
+                val summary = Summary(
+                    lesson = lesson,
+                    content = content,
+                    editedBy = user
+                )
+                summaryMapper.toResponse(summaryRepo.save(summary))
+            }
         }.subscribeOn(Schedulers.boundedElastic())
-         .flatMap { existingSummary ->
-             if (existingSummary != null) {
-                 updateSummary(lessonId, userId, UpdateSummaryRequest(content))
-             } else {
-                 createSummary(lessonId, userId, CreateSummaryRequest(content))
-             }
-         }
     }
 }

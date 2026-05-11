@@ -1,5 +1,7 @@
 package com.example.lib4gz.courses.model.payload
 
+import com.example.lib4gz.exercise.model.payload.ExerciseResponse
+
 // Requests
 data class CreateLessonRequest(
     val title: String,
@@ -20,5 +22,22 @@ data class LessonResponse(
     val hasSummary: Boolean,
     val exerciseCount: Int? = null,
     val createdAt: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    // Denormalized: parent module title — removes the lesson→module trivial lookup.
+    val moduleTitle: String? = null,
+    // ?expand=module → owning module's minimal view
+    val module: ModuleSummary? = null,
+    // ?expand=summary → the lesson's summary (null if hasSummary == false)
+    val summary: SummaryResponse? = null,
+    // ?expand=exercises → ordered exercise list (each can carry mySubmissionStatus)
+    val exercises: List<ExerciseResponse>? = null
+)
+
+/**
+ * Minimal module view used when expanded inside a lesson response.
+ */
+data class ModuleSummary(
+    val id: String,
+    val title: String,
+    val orderIndex: Int
 )

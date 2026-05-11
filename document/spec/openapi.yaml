@@ -1137,6 +1137,9 @@ paths:
       description: >
         Enrolls the authenticated user in the specified course.
         Optionally specify an enrollment role (defaults to LEARNER).
+        This endpoint is idempotent — if the user already has an enrollment,
+        the existing enrollment is returned as a successful response without
+        creating a new record.
       parameters:
         - $ref: "#/components/parameters/XUserIdHeader"
         - $ref: "#/components/parameters/CourseIdPath"
@@ -1148,13 +1151,11 @@ paths:
               $ref: "#/components/schemas/EnrollmentRequest"
       responses:
         "201":
-          description: Enrollment created successfully
+          description: Enrollment created or existing enrollment returned
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/EnrollmentResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":

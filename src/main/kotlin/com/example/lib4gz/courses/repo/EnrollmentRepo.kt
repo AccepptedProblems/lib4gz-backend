@@ -23,4 +23,10 @@ interface EnrollmentRepo : JpaRepository<Enrollment, String> {
     fun findActiveEnrollment(courseId: String, userId: String): Enrollment?
 
     fun countByCourse_IdAndStatus(courseId: String, status: EnrollmentStatus): Long
+
+    /**
+     * Batched fetch of the caller's enrollments across many courses.
+     * Used by `GET /me/courses` and list endpoints to populate `myEnrollment` without N+1.
+     */
+    fun findByCourse_IdInAndUser_Id(courseIds: Collection<String>, userId: String): List<Enrollment>
 }

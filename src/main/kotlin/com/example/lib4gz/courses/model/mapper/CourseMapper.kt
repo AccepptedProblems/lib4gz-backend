@@ -9,7 +9,12 @@ import org.springframework.stereotype.Component
 class CourseMapper {
 
     companion object {
-        fun toResponse(course: Course, moduleCount: Int? = null, enrollmentCount: Int? = null): CourseResponse {
+        fun toResponse(
+            course: Course,
+            moduleCount: Int? = null,
+            enrollmentCount: Int? = null,
+            myEnrollment: EnrollmentSummary? = null
+        ): CourseResponse {
             return CourseResponse(
                 id = course.id,
                 code = course.code,
@@ -21,7 +26,8 @@ class CourseMapper {
                 createdAt = course.createdAt,
                 updatedAt = course.updatedAt,
                 moduleCount = moduleCount,
-                enrollmentCount = enrollmentCount
+                enrollmentCount = enrollmentCount,
+                myEnrollment = myEnrollment
             )
         }
 
@@ -57,6 +63,15 @@ class EnrollmentMapper {
             updatedAt = enrollment.updatedAt
         )
     }
+
+    fun toSummary(enrollment: Enrollment): EnrollmentSummary {
+        return EnrollmentSummary(
+            id = enrollment.id,
+            role = enrollment.role,
+            status = enrollment.status,
+            joinedAt = enrollment.joinedAt
+        )
+    }
 }
 
 @Component
@@ -73,12 +88,36 @@ class ModuleMapper {
             updatedAt = module.updatedAt
         )
     }
+
+    fun toSummary(module: Module): ModuleSummary {
+        return ModuleSummary(
+            id = module.id,
+            title = module.title,
+            orderIndex = module.orderIndex
+        )
+    }
 }
 
+/**
+ * Maps Lesson entity to LessonResponse.
+ *
+ * The `toResponse(...)` overload accepts optional expand-fields (`moduleSummary`,
+ * `summary`, `exercises`). Callers only pass the fields they want to expose;
+ * keeping a single map function avoids parallel "to*Response" methods per expand
+ * combination while preserving the Single Responsibility of mapping.
+ */
 @Component
 class LessonMapper {
 
-    fun toResponse(lesson: Lesson, hasSummary: Boolean, exerciseCount: Int? = null): LessonResponse {
+    fun toResponse(
+        lesson: Lesson,
+        hasSummary: Boolean,
+        exerciseCount: Int? = null,
+        moduleTitle: String? = null,
+        moduleSummary: ModuleSummary? = null,
+        summary: SummaryResponse? = null,
+        exercises: List<com.example.lib4gz.exercise.model.payload.ExerciseResponse>? = null
+    ): LessonResponse {
         return LessonResponse(
             id = lesson.id,
             moduleId = lesson.module.id,
@@ -87,7 +126,11 @@ class LessonMapper {
             hasSummary = hasSummary,
             exerciseCount = exerciseCount,
             createdAt = lesson.createdAt,
-            updatedAt = lesson.updatedAt
+            updatedAt = lesson.updatedAt,
+            moduleTitle = moduleTitle ?: lesson.module.title,
+            module = moduleSummary,
+            summary = summary,
+            exercises = exercises
         )
     }
 }
