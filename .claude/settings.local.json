@@ -24,7 +24,11 @@
       "Bash(git -C /Users/namnguyen/Desktop/w4gz/lib4gz-project/lib4gz-fe ls-files -- documents/)",
       "Bash(chmod +x /Users/namnguyen/Desktop/w4gz/lib4gz-project/lib4gz/deploy/setup-secrets.sh /Users/namnguyen/Desktop/w4gz/lib4gz-project/lib4gz/deploy/deploy.sh)",
       "Bash(wc -l /Users/namnguyen/Desktop/w4gz/lib4gz-project/lib4gz/src/main/kotlin/com/example/lib4gz/courses/service/*.kt)",
-      "Bash(./gradlew compileKotlin --console=plain)"
+      "Bash(./gradlew compileKotlin --console=plain)",
+      "Bash(brew list *)",
+      "Bash(brew install *)",
+      "Bash(brew reinstall *)",
+      "Bash(/opt/homebrew/opt/python@3.13/libexec/bin/python *)"
     ],
     "deny": [],
     "ask": []

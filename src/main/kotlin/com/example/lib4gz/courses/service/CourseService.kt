@@ -52,7 +52,8 @@ class CourseServiceImpl(
     private val userRepo: UserRepo,
     private val enrollmentRepo: EnrollmentRepo,
     private val moduleRepo: ModuleRepo,
-    private val enrollmentMapper: EnrollmentMapper
+    private val enrollmentMapper: EnrollmentMapper,
+    private val progressService: ProgressService
 ) : CourseService {
 
     override fun createCourse(userId: String, request: CreateCourseRequest): Mono<CourseResponse> {
@@ -166,7 +167,8 @@ class CourseServiceImpl(
 
     override fun listEnrolledCourses(userId: String): Flux<CourseResponse> {
         return Mono.fromCallable {
-            assembleCourseList(courseRepo.findByEnrolledUser(userId), userId)
+            // Enrolled listing is the dashboard read — include the caller's progress.
+            assembleCourseList(courseRepo.findByEnrolledUser(userId), userId, withProgress = true)
         }.flatMapMany { Flux.fromIterable(it) }
             .subscribeOn(Schedulers.boundedElastic())
     }
@@ -202,13 +204,23 @@ class CourseServiceImpl(
     /**
      * Batched list assembly. Issues exactly one enrollment query for the caller's
      * relationship across every course in the list — avoids the per-row lookup.
+     * With [withProgress], adds two grouped queries (exercise totals + the
+     * caller's done submissions) covering all courses at once.
      */
-    private fun assembleCourseList(courses: List<Course>, userId: String): List<CourseResponse> {
+    private fun assembleCourseList(
+        courses: List<Course>,
+        userId: String,
+        withProgress: Boolean = false
+    ): List<CourseResponse> {
         if (courses.isEmpty()) return emptyList()
         val courseIds = courses.map { it.id }
-        val myEnrollmentsByCourseId: Map<String, EnrollmentSummary> =
+        val myEnrollmentsByCourseId: Map<String, Enrollment> =
             enrollmentRepo.findByCourse_IdInAndUser_Id(courseIds, userId)
-                .associate { it.course.id to enrollmentMapper.toSummary(it) }
+                .associateBy { it.course.id }
+
+        val progressByCourseId =
+            if (withProgress) progressService.computeProgressForCourses(courseIds, userId, myEnrollmentsByCourseId)
+            else emptyMap()
 
         return courses.map { course ->
             CourseMapper.toResponse(
@@ -216,7 +228,8 @@ class CourseServiceImpl(
                 moduleCount = moduleRepo.countByCourse_Id(course.id).toInt(),
                 enrollmentCount = enrollmentRepo
                     .countByCourse_IdAndStatus(course.id, EnrollmentStatus.ACTIVE).toInt(),
-                myEnrollment = myEnrollmentsByCourseId[course.id]
+                myEnrollment = myEnrollmentsByCourseId[course.id]?.let(enrollmentMapper::toSummary),
+                progress = progressByCourseId[course.id]
             )
         }
     }

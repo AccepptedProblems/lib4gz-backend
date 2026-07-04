@@ -9,6 +9,7 @@ import com.example.lib4gz.courses.model.entity.Visibility
 import com.example.lib4gz.courses.model.mapper.CourseMapper
 import com.example.lib4gz.courses.model.mapper.EnrollmentMapper
 import com.example.lib4gz.courses.model.mapper.LessonMapper
+import com.example.lib4gz.courses.model.payload.CourseProgress
 import com.example.lib4gz.courses.model.payload.SyllabusModule
 import com.example.lib4gz.courses.model.payload.SyllabusResponse
 import com.example.lib4gz.courses.repo.CourseRepo
@@ -50,7 +51,8 @@ class SyllabusServiceImpl(
     private val exerciseRepo: ExerciseRepo,
     private val enrollmentRepo: EnrollmentRepo,
     private val lessonMapper: LessonMapper,
-    private val enrollmentMapper: EnrollmentMapper
+    private val enrollmentMapper: EnrollmentMapper,
+    private val progressService: ProgressService
 ) : SyllabusService {
 
     override fun getSyllabus(courseId: String, userId: String): Mono<SyllabusResponse> {
@@ -79,6 +81,10 @@ class SyllabusServiceImpl(
             val enrollmentCount =
                 enrollmentRepo.countByCourse_IdAndStatus(courseId, EnrollmentStatus.ACTIVE).toInt()
 
+            // lessonId → done, only for exercise-bearing lessons; a lesson absent
+            // from this map has no exercises and therefore no completion state.
+            val completionByLesson = progressService.computeLessonCompletion(courseId, userId)
+
             val syllabusModules = modules.map { module ->
                 val moduleLessons = lessonsByModuleId[module.id].orEmpty()
                 SyllabusModule(
@@ -90,10 +96,13 @@ class SyllabusServiceImpl(
                     createdAt = module.createdAt,
                     updatedAt = module.updatedAt,
                     lessons = moduleLessons.map { lesson ->
+                        val completion = completionByLesson[lesson.id]
                         lessonMapper.toResponse(
                             lesson = lesson,
                             hasSummary = lesson.id in lessonIdsWithSummary,
                             exerciseCount = exerciseCountByLesson[lesson.id] ?: 0,
+                            completed = completion?.completed,
+                            completedExerciseCount = completion?.doneExercises,
                             moduleTitle = module.title
                         )
                     }
@@ -101,11 +110,24 @@ class SyllabusServiceImpl(
             }
 
             val mySummary = myEnrollment?.let(enrollmentMapper::toSummary)
+            val progress = myEnrollment?.let {
+                val visitedTitle = it.lastVisitedLessonId?.let { id ->
+                    lessonsByModuleId.values.flatten().firstOrNull { l -> l.id == id }?.title
+                }
+                CourseProgress(
+                    completedLessons = completionByLesson.count { entry -> entry.value.completed },
+                    totalLessons = completionByLesson.size,
+                    lastVisitedLessonId = if (visitedTitle != null) it.lastVisitedLessonId else null,
+                    lastVisitedLessonTitle = visitedTitle,
+                    lastVisitedAt = if (visitedTitle != null) it.lastVisitedAt else null
+                )
+            }
             val courseResponse = CourseMapper.toResponse(
                 course = course,
                 moduleCount = modules.size,
                 enrollmentCount = enrollmentCount,
-                myEnrollment = mySummary
+                myEnrollment = mySummary,
+                progress = progress
             )
 
             SyllabusResponse(course = courseResponse, modules = syllabusModules)

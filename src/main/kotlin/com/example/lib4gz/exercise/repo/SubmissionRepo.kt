@@ -43,4 +43,22 @@ interface SubmissionRepo : JpaRepository<Submission, String> {
 
     @Query("SELECT s FROM Submission s WHERE s.exercise.lesson.id = :lessonId")
     fun findByLessonId(lessonId: String): List<Submission>
+
+    /**
+     * Per-lesson count of the user's "done" exercises (one submission per
+     * exercise per user is enforced by the unique constraint, so COUNT(s) is
+     * the number of distinct exercises done in that lesson).
+     */
+    @Query(
+        "SELECT new com.example.lib4gz.exercise.repo.LessonCountRow(" +
+                "s.exercise.lesson.module.course.id, s.exercise.lesson.id, COUNT(s)) " +
+                "FROM Submission s WHERE s.user.id = :userId AND s.status IN :statuses " +
+                "AND s.exercise.lesson.module.course.id IN :courseIds " +
+                "GROUP BY s.exercise.lesson.module.course.id, s.exercise.lesson.id"
+    )
+    fun countDonePerLessonByCourseIds(
+        courseIds: Collection<String>,
+        userId: String,
+        statuses: Collection<SubmissionStatus>
+    ): List<LessonCountRow>
 }

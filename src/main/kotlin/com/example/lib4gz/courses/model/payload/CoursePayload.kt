@@ -32,7 +32,25 @@ data class CourseResponse(
     val enrollmentCount: Int? = null,
     // Denormalized: the caller's enrollment (null when unenrolled or anonymous).
     // Eliminates the separate GET /courses/{id}/my-enrollment round-trip.
-    val myEnrollment: EnrollmentSummary? = null
+    val myEnrollment: EnrollmentSummary? = null,
+    // The caller's progress in this course (null on created/public listings where
+    // progress is meaningless — only populated for enrolled reads).
+    val progress: CourseProgress? = null
+)
+
+/**
+ * Per-caller course progress, derived entirely from submissions:
+ * a lesson counts as done when every one of its exercises has a SUBMITTED or
+ * APPROVED submission from the caller. Lessons without exercises are excluded
+ * from both counts, so `totalLessons` is the number of exercise-bearing lessons.
+ * `totalLessons == 0` means "no gradable content yet" — render no percentage.
+ */
+data class CourseProgress(
+    val completedLessons: Int,
+    val totalLessons: Int,
+    val lastVisitedLessonId: String? = null,
+    val lastVisitedLessonTitle: String? = null,
+    val lastVisitedAt: Long? = null
 )
 
 data class UserSummary(

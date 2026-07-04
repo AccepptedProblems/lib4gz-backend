@@ -91,6 +91,14 @@ data class Enrollment(
     @Column(name = "joined_at")
     var joinedAt: Long? = null,
 
+    // Resume state: the last lesson this user opened in this course.
+    // Stored as a plain id (not a relation) so a deleted lesson never breaks the row.
+    @Column(name = "last_visited_lesson_id", length = 50)
+    var lastVisitedLessonId: String? = null,
+
+    @Column(name = "last_visited_at")
+    var lastVisitedAt: Long? = null,
+
     @Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: Long = Instant.now().toEpochMilli(),
 
@@ -100,6 +108,11 @@ data class Enrollment(
     @PreUpdate
     fun preUpdate() {
         updatedAt = Instant.now().toEpochMilli()
+    }
+
+    fun recordVisit(lessonId: String) {
+        lastVisitedLessonId = lessonId
+        lastVisitedAt = Instant.now().toEpochMilli()
     }
 
     fun approve() {

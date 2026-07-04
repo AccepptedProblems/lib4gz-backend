@@ -13,7 +13,8 @@ class CourseMapper {
             course: Course,
             moduleCount: Int? = null,
             enrollmentCount: Int? = null,
-            myEnrollment: EnrollmentSummary? = null
+            myEnrollment: EnrollmentSummary? = null,
+            progress: CourseProgress? = null
         ): CourseResponse {
             return CourseResponse(
                 id = course.id,
@@ -27,7 +28,8 @@ class CourseMapper {
                 updatedAt = course.updatedAt,
                 moduleCount = moduleCount,
                 enrollmentCount = enrollmentCount,
-                myEnrollment = myEnrollment
+                myEnrollment = myEnrollment,
+                progress = progress
             )
         }
 
@@ -113,6 +115,8 @@ class LessonMapper {
         lesson: Lesson,
         hasSummary: Boolean,
         exerciseCount: Int? = null,
+        completed: Boolean? = null,
+        completedExerciseCount: Int? = null,
         moduleTitle: String? = null,
         moduleSummary: ModuleSummary? = null,
         summary: SummaryResponse? = null,
@@ -125,6 +129,8 @@ class LessonMapper {
             orderIndex = lesson.orderIndex,
             hasSummary = hasSummary,
             exerciseCount = exerciseCount,
+            completed = completed,
+            completedExerciseCount = completedExerciseCount,
             createdAt = lesson.createdAt,
             updatedAt = lesson.updatedAt,
             moduleTitle = moduleTitle ?: lesson.module.title,
