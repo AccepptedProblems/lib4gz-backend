@@ -2,6 +2,8 @@
 
 A Spring Boot backend for a Learning Management System (LMS) supporting course management, enrollment, lesson delivery, exercises, and submission workflows.
 
+> Non-technical overview of the product: [`../../docs/`](../../docs/README.md).
+
 ---
 
 ## Tech Stack
@@ -29,7 +31,7 @@ document/
 │   ├── project-structure.md          # Package & file organization
 │   └── database.md                   # Database schema (DDL)
 ├── features/
-│   ├── auth.md                       # Authentication (User, Login, Register)
+│   ├── auth.md                       # Auth: login, email/Google registration, profile
 │   ├── course.md                     # Course management
 │   ├── enrollment.md                 # Enrollment & roles
 │   ├── module.md                     # Course modules
@@ -39,7 +41,7 @@ document/
 │   ├── question.md                   # Questions (batch ops)
 │   └── submission.md                 # Submissions & answers
 ├── models/
-│   ├── auth.yaml                    # User entity, auth DTOs, UserMapper
+│   ├── auth.yaml                    # User, EmailOtp, PendingRegistration, auth DTOs
 │   ├── course.yaml                  # Course entity, Visibility enum, course DTOs
 │   ├── enrollment.yaml              # Enrollment entity, enroll enums & DTOs
 │   ├── module.yaml                  # Module entity, module DTOs, ModuleMapper
@@ -68,7 +70,7 @@ document/
 
 ### Features
 
-- [Authentication (User, Login, Register)](features/auth.md)
+- [Authentication (Login, Email & Google Registration, Profile)](features/auth.md)
 - [Course Management](features/course.md)
 - [Enrollment & Roles](features/enrollment.md)
 - [Course Modules](features/module.md)
@@ -83,7 +85,7 @@ YAML model definitions for all entities, enums, DTOs, and mappers. Referenced by
 
 | File | Description |
 |------|-------------|
-| [auth.yaml](models/auth.yaml) | User entity, auth DTOs, UserMapper |
+| [auth.yaml](models/auth.yaml) | User, EmailOtp, PendingRegistration entities, OtpPurpose enum, login/registration/Google/profile DTOs, UserMapper, RegistrationMapper |
 | [course.yaml](models/course.yaml) | Course entity, Visibility enum, course DTOs, UserSummary, CourseMapper |
 | [enrollment.yaml](models/enrollment.yaml) | Enrollment entity, EnrollmentRole/Status enums, enrollment DTOs |
 | [module.yaml](models/module.yaml) | Module entity, module DTOs, ModuleMapper |
@@ -112,10 +114,19 @@ YAML model definitions for all entities, enums, DTOs, and mappers. Referenced by
 
 | Domain                    | Capabilities                                                        |
 | ------------------------- | ------------------------------------------------------------------- |
-| **Auth**                  | Register, login, JWT issuance and validation, role-based access     |
+| **Auth**                  | Login by username or email, JWT issuance and validation, role-based access |
 | **Course Management**     | CRUD courses, modules, lessons, summaries                           |
 | **Exercise Management**   | CRUD exercises, batch question creation and updates                 |
 | **Submission Management** | Create submissions, submit answers, retrieve submission details     |
+
+### Added after Phase 1
+
+| Domain                    | Capabilities                                                        |
+| ------------------------- | ------------------------------------------------------------------- |
+| **Registration**          | Email + 6-digit one-time code, then choose username / name / password (`/v1/auth/register/**`); username/password `POST /v1/auth/register` removed |
+| **Google sign-in**        | `POST /v1/auth/google` with a Google ID token: log in, link a verified account, or start a registration |
+| **Profile**               | `GET`/`PATCH /v1/users/me`, email change and confirmation by code (`/v1/users/me/email/verify`, `/resend`), `GET /v1/users/me/courses` (replaces `/v1/me/courses`) |
+| **Email**                 | Gmail SMTP sender for one-time codes; logs mail instead when `MAIL_USERNAME` is unset |
 
 ### Deferred
 
@@ -129,7 +140,6 @@ The following are **out of scope** for Phase 1 and planned for future iterations
 - Tags, badges, and comments
 - Submission version history
 - Public gallery
-- OAuth / third-party authentication providers
 
 ---
 

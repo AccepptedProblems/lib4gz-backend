@@ -1,11 +1,18 @@
 ---
 metadata:
   feature: auth
-  description: Authentication models - User entity, auth DTOs, and mapper
+  description: Authentication models - User, EmailOtp, PendingRegistration entities, auth/registration/profile DTOs, and mappers
   source_files:
-    entity: src/main/kotlin/com/example/lib4gz/auth/model/entity/User.kt
-    payload: src/main/kotlin/com/example/lib4gz/auth/model/payload/UserPayload.kt
-    mapper: src/main/kotlin/com/example/lib4gz/auth/model/mapper/UserMapper.kt
+    entity:
+      - src/main/kotlin/com/example/lib4gz/auth/model/entity/User.kt
+      - src/main/kotlin/com/example/lib4gz/auth/model/entity/EmailOtp.kt
+      - src/main/kotlin/com/example/lib4gz/auth/model/entity/PendingRegistration.kt
+    payload:
+      - src/main/kotlin/com/example/lib4gz/auth/model/payload/UserPayload.kt
+      - src/main/kotlin/com/example/lib4gz/auth/model/payload/RegistrationPayload.kt
+    mapper:
+      - src/main/kotlin/com/example/lib4gz/auth/model/mapper/UserMapper.kt
+      - src/main/kotlin/com/example/lib4gz/auth/model/mapper/RegistrationMapper.kt
 
 enums:
   UserRole:
@@ -17,6 +24,7 @@ enums:
       - TEACHER
     notes:
       - "TEACHER role is required to create courses. Users without this global role cannot call POST /v1/courses."
+      - "UserResponse.role exposes a single role with precedence ADMIN > TEACHER > USER."
 
   UserStatus:
     package: com.example.lib4gz.auth.model.entity
@@ -25,6 +33,17 @@ enums:
       - ACTIVE
       - INACTIVE
       - BANNED
+
+  OtpPurpose:
+    package: com.example.lib4gz.auth.model.entity
+    file: EmailOtp.kt
+    values:
+      - REGISTER
+      - EMAIL_CHANGE
+      - LOGIN
+      - PASSWORD_RESET
+    notes:
+      - "LOGIN and PASSWORD_RESET are reserved; no endpoint issues them yet."
 
 entity:
   User:
@@ -36,7 +55,7 @@ entity:
       - "@Table(name = \"users\")"
       - "@SQLDelete(sql = \"UPDATE users SET deleted_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint WHERE id = ?\")"
     notes:
-      - "No @Where annotation (unlike other soft-deleted entities). Soft-deleted users can still appear in queries."
+      - "No @Where annotation (unlike other soft-deleted entities). Soft-deleted users can still appear in queries and keep their username/email reserved."
     fields:
       id:
         type: String
@@ -47,9 +66,11 @@ entity:
           - "@Column(length = 50)"
       email:
         type: String
-        mutability: val
+        mutability: var
         annotations:
           - "@Column(nullable = true, unique = true, length = 255)"
+        notes:
+          - "var so a confirmed email change can swap pendingEmail in. Stored lowercased by new code; looked up case-insensitively."
       username:
         type: String
         mutability: val
@@ -60,7 +81,9 @@ entity:
         mutability: val
         default: "null"
         annotations:
-          - "@Column(name = \"passwordHash\", length = 255)"
+          - "@Column(name = \"password_hash\", length = 255)"
+        notes:
+          - "null for accounts created through Google; such accounts cannot use password login."
       name:
         type: String
         mutability: var
@@ -70,13 +93,15 @@ entity:
         type: String?
         mutability: var
         default: "null"
+        annotations:
+          - "@Column(name = \"avatar_url\")"
       roles:
         type: MutableSet<UserRole>
         mutability: val
         default: mutableSetOf(UserRole.USER)
         annotations:
           - "@ElementCollection(targetClass = UserRole::class, fetch = FetchType.EAGER)"
-          - "@CollectionTable(name = \"user_global_roles\", joinColumns = [JoinColumn(name = \"userId\")])"
+          - "@CollectionTable(name = \"user_global_roles\", joinColumns = [JoinColumn(name = \"user_id\")])"
           - "@Enumerated(EnumType.STRING)"
           - "@Column(name = \"role\")"
       emailVerified:
@@ -84,7 +109,23 @@ entity:
         mutability: var
         default: "false"
         annotations:
-          - "@Column(nullable = false)"
+          - "@Column(name = \"email_verified\", nullable = false)"
+      pendingEmail:
+        type: String?
+        mutability: var
+        default: "null"
+        annotations:
+          - "@Column(name = \"pending_email\", length = 255)"
+        notes:
+          - "New address waiting for its EMAIL_CHANGE code; swapped into email once confirmed."
+      googleId:
+        type: String?
+        mutability: var
+        default: "null"
+        annotations:
+          - "@Column(name = \"google_id\", unique = true, length = 255)"
+        notes:
+          - "Google `sub` claim. Set at Google registration, or when Google sign-in links an account with a verified matching email."
       status:
         type: UserStatus
         mutability: var
@@ -97,17 +138,19 @@ entity:
         mutability: val
         default: Instant.now().toEpochMilli()
         annotations:
-          - "@Column(nullable = false, updatable = false)"
+          - "@Column(name = \"created_at\", nullable = false, updatable = false)"
       updatedAt:
         type: Long
         mutability: var
         default: Instant.now().toEpochMilli()
         annotations:
-          - "@Column(nullable = false)"
+          - "@Column(name = \"updated_at\", nullable = false)"
       deletedAt:
         type: Long?
         mutability: var
         default: "null"
+        annotations:
+          - "@Column(name = \"deleted_at\")"
     methods:
       preUpdate:
         annotation: "@PreUpdate"
@@ -123,27 +166,123 @@ entity:
         returns: Boolean
         body: "hasRole(UserRole.TEACHER)"
 
-schemas:
-  UserCreationRequest:
-    package: com.example.lib4gz.auth.model.payload
-    file: UserPayload.kt
-    type: object
-    required:
-      - username
-      - email
-      - password
-    properties:
-      username:
-        type: string
+  EmailOtp:
+    package: com.example.lib4gz.auth.model.entity
+    file: EmailOtp.kt
+    table: email_otps
+    annotations:
+      - "@Entity"
+      - "@Table(name = \"email_otps\", uniqueConstraints = [UniqueConstraint(columnNames = [\"email\", \"purpose\"])])"
+    notes:
+      - "Hard-deleted (transient credential). One live code per (email, purpose)."
+      - "OtpService.issue overwrites the existing row in place instead of delete + insert: Hibernate flushes inserts before deletes, which would violate the unique constraint."
+    fields:
+      id:
+        type: String
+        mutability: val
+        default: "IdGenerator.generate(\"otp\")"
+        annotations:
+          - "@Id"
+          - "@Column(length = 50)"
       email:
-        type: string
-      password:
-        type: string
-    methods:
-      toEntity:
-        returns: User
-        body: "User(id = IdGenerator.generate(\"usr\"), email = email, password = password, name = username, username = username)"
+        type: String
+        mutability: val
+        annotations:
+          - "@Column(nullable = false, length = 255)"
+      purpose:
+        type: OtpPurpose
+        mutability: val
+        annotations:
+          - "@Enumerated(EnumType.STRING)"
+          - "@Column(nullable = false, length = 30)"
+      codeHash:
+        type: String
+        mutability: var
+        annotations:
+          - "@Column(name = \"code_hash\", nullable = false, length = 64)"
+        notes:
+          - "SHA-256 hex of \"$pepper:$email:$purpose:$code\"; pepper = application.security.jwt.secret-key."
+      attempts:
+        type: Int
+        mutability: var
+        default: "0"
+        annotations:
+          - "@Column(nullable = false)"
+      expiresAt:
+        type: Long
+        mutability: var
+        annotations:
+          - "@Column(name = \"expires_at\", nullable = false)"
+      createdAt:
+        type: Long
+        mutability: var
+        default: Instant.now().toEpochMilli()
+        annotations:
+          - "@Column(name = \"created_at\", nullable = false)"
+        notes:
+          - "Reset on every reissue; the resend cooldown is measured from it."
 
+  PendingRegistration:
+    package: com.example.lib4gz.auth.model.entity
+    file: PendingRegistration.kt
+    table: pending_registrations
+    annotations:
+      - "@Entity"
+      - "@Table(name = \"pending_registrations\")"
+    notes:
+      - "Hard-deleted on completion, on a new start for the same email, or by RegistrationCleanupJob after expiry."
+      - "The id is the only credential the browser holds between verifying the email and completing registration."
+    fields:
+      id:
+        type: String
+        mutability: val
+        default: "IdGenerator.generate(\"reg\")"
+        annotations:
+          - "@Id"
+          - "@Column(length = 50)"
+      email:
+        type: String
+        mutability: val
+        annotations:
+          - "@Column(nullable = false, length = 255)"
+      googleId:
+        type: String?
+        mutability: val
+        default: "null"
+        annotations:
+          - "@Column(name = \"google_id\", length = 255)"
+        notes:
+          - "Set on the Google path; null on the email path (then a password is required)."
+      name:
+        type: String?
+        mutability: val
+        default: "null"
+        annotations:
+          - "@Column(length = 255)"
+      avatarUrl:
+        type: String?
+        mutability: val
+        default: "null"
+        annotations:
+          - "@Column(name = \"avatar_url\", columnDefinition = \"text\")"
+      emailVerified:
+        type: Boolean
+        mutability: val
+        annotations:
+          - "@Column(name = \"email_verified\", nullable = false)"
+      createdAt:
+        type: Long
+        mutability: val
+        default: Instant.now().toEpochMilli()
+        annotations:
+          - "@Column(name = \"created_at\", nullable = false)"
+      expiresAt:
+        type: Long
+        mutability: val
+        annotations:
+          - "@Column(name = \"expires_at\", nullable = false)"
+
+schemas:
   UserResponse:
     package: com.example.lib4gz.auth.model.payload
     file: UserPayload.kt
@@ -155,6 +294,49 @@ schemas:
         type: string
       email:
         type: string
+      name:
+        type: string
+        description: "Display name; falls back to username when blank."
+      avatarUrl:
+        type: string
+        nullable: true
+      role:
+        $ref: "#/enums/UserRole"
+        description: "Highest global role: ADMIN > TEACHER > USER."
+      emailVerified:
+        type: boolean
+      pendingEmail:
+        type: string
+        nullable: true
+        description: "New email waiting for its code, or null."
+
+  UpdateMeRequest:
+    package: com.example.lib4gz.auth.model.payload
+    file: UserPayload.kt
+    type: object
+    properties:
+      name:
+        type: string
+        nullable: true
+        description: "Trimmed; blank -> 400."
+      email:
+        type: string
+        nullable: true
+        description: "Trimmed and lowercased; a different address becomes pendingEmail and a code is sent."
+
+  MeCoursesResponse:
+    package: com.example.lib4gz.auth.model.payload
+    file: UserPayload.kt
+    type: object
+    properties:
+      enrolled:
+        type: array
+        items:
+          $ref: "course.yaml#/schemas/CourseResponse"
+      created:
+        type: array
+        items:
+          $ref: "course.yaml#/schemas/CourseResponse"
 
   LoginReq:
     package: com.example.lib4gz.auth.model.payload
@@ -166,6 +348,7 @@ schemas:
     properties:
       username:
         type: string
+        description: "Username, or email when it contains '@' (case-insensitive email lookup)."
       password:
         type: string
 
@@ -190,6 +373,121 @@ schemas:
       accessToken:
         $ref: "#/schemas/Token"
 
+  StartEmailRegistrationRequest:
+    package: com.example.lib4gz.auth.model.payload
+    file: RegistrationPayload.kt
+    type: object
+    required:
+      - email
+    properties:
+      email:
+        type: string
+
+  VerifyEmailRegistrationRequest:
+    package: com.example.lib4gz.auth.model.payload
+    file: RegistrationPayload.kt
+    type: object
+    required:
+      - email
+      - code
+    properties:
+      email:
+        type: string
+      code:
+        type: string
+        description: "6-digit one-time code."
+
+  CompleteRegistrationRequest:
+    package: com.example.lib4gz.auth.model.payload
+    file: RegistrationPayload.kt
+    type: object
+    required:
+      - registrationId
+      - username
+    properties:
+      registrationId:
+        type: string
+        description: "reg_… id from RegistrationStartedResponse."
+      username:
+        type: string
+        description: "Min 3 chars, ^[a-zA-Z0-9]+$, unique."
+      name:
+        type: string
+        nullable: true
+        description: "Blank or missing -> username."
+      password:
+        type: string
+        nullable: true
+        description: "Required (min 8) on the email path, ignored on the Google path."
+
+  OtpSentResponse:
+    package: com.example.lib4gz.auth.model.payload
+    file: RegistrationPayload.kt
+    type: object
+    properties:
+      email:
+        type: string
+        description: "Address the code was sent to."
+      cooldownSeconds:
+        type: integer
+        format: int64
+        default: 60
+
+  RegistrationStartedResponse:
+    package: com.example.lib4gz.auth.model.payload
+    file: RegistrationPayload.kt
+    type: object
+    properties:
+      registrationId:
+        type: string
+      email:
+        type: string
+      name:
+        type: string
+        nullable: true
+        description: "Google display name; null on the email path."
+      avatarUrl:
+        type: string
+        nullable: true
+      requiresPassword:
+        type: boolean
+        description: "true on the email path, false on the Google path."
+
+  VerifyEmailCodeRequest:
+    package: com.example.lib4gz.auth.model.payload
+    file: RegistrationPayload.kt
+    type: object
+    required:
+      - code
+    properties:
+      code:
+        type: string
+
+  GoogleSignInRequest:
+    package: com.example.lib4gz.auth.model.payload
+    file: RegistrationPayload.kt
+    type: object
+    required:
+      - idToken
+    properties:
+      idToken:
+        type: string
+        description: "Credential from the Google Identity Services button."
+
+  GoogleSignInResponse:
+    package: com.example.lib4gz.auth.model.payload
+    file: RegistrationPayload.kt
+    type: object
+    notes:
+      - "Exactly one field is non-null: login for a known account, registration for a new one."
+    properties:
+      login:
+        $ref: "#/schemas/LoginResponse"
+        nullable: true
+      registration:
+        $ref: "#/schemas/RegistrationStartedResponse"
+        nullable: true
+
 mapper:
   UserMapper:
     package: com.example.lib4gz.auth.model.mapper
@@ -199,6 +497,25 @@ mapper:
       toResponse:
         signature: "fun User.toResponse(): UserResponse"
         mapping:
-          id: "id"
+          id: id
           username: username
           email: email
+          name: "name.ifBlank { username }"
+          avatarUrl: avatarUrl
+          role: "isAdmin() -> ADMIN, isTeacher() -> TEACHER, else USER"
+          emailVerified: emailVerified
+          pendingEmail: pendingEmail
+
+  RegistrationMapper:
+    package: com.example.lib4gz.auth.model.mapper
+    file: RegistrationMapper.kt
+    pattern: extension-function
+    methods:
+      toStartedResponse:
+        signature: "fun PendingRegistration.toStartedResponse(): RegistrationStartedResponse"
+        mapping:
+          registrationId: id
+          email: email
+          name: name
+          avatarUrl: avatarUrl
+          requiresPassword: "googleId == null"

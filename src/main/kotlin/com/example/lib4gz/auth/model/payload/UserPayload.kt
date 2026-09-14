@@ -1,29 +1,35 @@
 package com.example.lib4gz.auth.model.payload
 
-import com.example.lib4gz.auth.model.entity.User
-import com.example.lib4gz.common.utils.IdGenerator
-
-data class UserCreationRequest(
-    val username: String,
-    val email: String,
-    val password: String
-) {
-    fun toEntity() = User(
-        id = IdGenerator.generate("usr"),
-        email = email,
-        password = password,
-        name = username,
-        username = username
-    )
-}
+import com.example.lib4gz.auth.model.entity.UserRole
+import com.example.lib4gz.courses.model.payload.CourseResponse
 
 data class UserResponse(
     val id: String,
     val username: String,
-    val email: String
+    val email: String,
+    val name: String,
+    val avatarUrl: String?,
+    val role: UserRole,
+    val emailVerified: Boolean,
+    val pendingEmail: String?
+)
+
+data class UpdateMeRequest(
+    val name: String? = null,
+    val email: String? = null
+)
+
+/**
+ * Self-scoped dashboard payload. Combines the two `GET /courses?type=enrolled|created`
+ * round-trips the dashboard previously issued into a single request.
+ */
+data class MeCoursesResponse(
+    val enrolled: List<CourseResponse>,
+    val created: List<CourseResponse>
 )
 
 data class LoginReq(
+    /** Username, or email when it contains `@`. */
     val username: String,
     val password: String
 )

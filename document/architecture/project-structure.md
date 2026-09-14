@@ -16,18 +16,31 @@ src/main/kotlin/com/example/lib4gz/
 │
 ├── auth/
 │   ├── controller/
-│   │   └── AuthController.kt
+│   │   ├── AuthController.kt              # login, email registration, Google sign-in
+│   │   └── UserController.kt              # /v1/users/me (+ email verify/resend, courses), grant-teacher
 │   ├── service/
-│   │   └── AuthService.kt
+│   │   ├── AuthService.kt                 # password login (username or email)
+│   │   ├── UserService.kt                 # profile, email change, dashboard courses, roles
+│   │   ├── OtpService.kt                  # 6-digit email codes
+│   │   ├── RegistrationService.kt         # email code → pending registration → account
+│   │   └── GoogleAuthService.kt           # Google ID token → login or pending registration
+│   ├── job/
+│   │   └── RegistrationCleanupJob.kt      # sweeps expired codes and pending registrations
 │   ├── repo/
-│   │   └── UserRepo.kt
+│   │   ├── UserRepo.kt
+│   │   ├── EmailOtpRepo.kt
+│   │   └── PendingRegistrationRepo.kt
 │   └── model/
 │       ├── entity/
-│       │   └── User.kt                    # User, UserRole, UserStatus
+│       │   ├── User.kt                    # User, UserRole, UserStatus
+│       │   ├── EmailOtp.kt                # EmailOtp, OtpPurpose
+│       │   └── PendingRegistration.kt
 │       ├── payload/
-│       │   └── UserPayload.kt             # UserCreationRequest, UserResponse, LoginReq, Token, LoginResponse
+│       │   ├── UserPayload.kt             # UserResponse, UpdateMeRequest, MeCoursesResponse, LoginReq, Token, LoginResponse
+│       │   └── RegistrationPayload.kt     # registration, OTP, and Google sign-in DTOs
 │       └── mapper/
-│           └── UserMapper.kt              # Extension fun User.toResponse()
+│           ├── UserMapper.kt              # Extension fun User.toResponse()
+│           └── RegistrationMapper.kt      # PendingRegistration.toStartedResponse()
 │
 ├── courses/
 │   ├── controller/
@@ -126,7 +139,7 @@ src/main/resources/
 
 ### `auth`
 
-Handles user registration, login, and JWT token generation. The `User` entity holds global roles and account status. The `AuthService` coordinates password hashing and token creation via `JwtProvider`.
+Handles accounts: password login (username or email), email-code and Google registration, the caller's profile and email change, and JWT token generation. The `User` entity holds global roles, account status, email verification, and the linked Google id. Mail goes through `common/mail/EmailSender`; Google ID tokens are checked by `common/config/security/GoogleTokenVerifier`.
 
 ### `courses`
 

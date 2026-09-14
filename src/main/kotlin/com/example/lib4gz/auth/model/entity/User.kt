@@ -14,7 +14,7 @@ data class User(
     val id: String = IdGenerator.generate("usr"),
 
     @Column(nullable = true, unique = true, length = 255)
-    val email: String,
+    var email: String,
 
     @Column(nullable = false, unique = true, length = 255)
     val username: String,
@@ -36,6 +36,13 @@ data class User(
 
     @Column(name = "email_verified", nullable = false)
     var emailVerified: Boolean = false,
+
+    // New address waiting for its one-time code; swapped into `email` once confirmed.
+    @Column(name = "pending_email", length = 255)
+    var pendingEmail: String? = null,
+
+    @Column(name = "google_id", unique = true, length = 255)
+    var googleId: String? = null,
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

@@ -102,11 +102,14 @@ JWT-based stateless authentication and authorization infrastructure.
   - sessionManagement STATELESS
 - Private corsConfigurationSource(): reads CORS config from security.json, registers for "/**"
 
-#### 10. Request Header Constants (`common/config/common/RequestHeader.kt`)
+#### 10. GoogleTokenVerifier (`common/config/security/GoogleTokenVerifier.kt`)
+See [Google ID token verification](#google-id-token-verification) below.
+
+#### 11. Request Header Constants (`common/config/common/RequestHeader.kt`)
 - Package: `com.example.lib4gz.common.config.common`
 - object PZRequestHeader { const val USER_ID = "X-User-Id" }
 
-#### 11. MutableHttpServletRequest (`common/config/common/MutableHttpServletRequest.kt`)
+#### 12. MutableHttpServletRequest (`common/config/common/MutableHttpServletRequest.kt`)
 - Package: `com.example.lib4gz.common.config.common`
 - class MutableHttpServletRequest(request: HttpServletRequest) : HttpServletRequestWrapper(request)
 - Private customHeaders: MutableMap&lt;String, String&gt;
@@ -118,7 +121,7 @@ JWT-based stateless authentication and authorization infrastructure.
 ### security.json (src/main/resources/security.json)
 ```json
 {
-  "permittedEndpoints": ["/v1/auth/login", "/v1/auth/register", "/v2/api-docs", "/v3/api-docs", "/v3/api-docs/**", "/swagger-resources", "/swagger-resources/**", "/configuration/ui", "/configuration/security", "/swagger-ui/**", "/webjars/**", "/swagger-ui.html", "/error"],
+  "permittedEndpoints": ["/v1/auth/login", "/v1/auth/register/**", "/v1/auth/google", "/v2/api-docs", "/v3/api-docs", "/v3/api-docs/**", "/swagger-resources", "/swagger-resources/**", "/configuration/ui", "/configuration/security", "/swagger-ui/**", "/webjars/**", "/swagger-ui.html", "/error"],
   "authorizedEndpoints": [],
   "corsSettings": {
     "allowedOrigins": ["http://localhost:3000", "http://localhost:3001"],
@@ -129,6 +132,37 @@ JWT-based stateless authentication and authorization infrastructure.
   }
 }
 ```
+
+Public auth routes:
+
+| Pattern | Covers |
+|---------|--------|
+| `/v1/auth/login` | Password login (username or email) |
+| `/v1/auth/register/**` | `/v1/auth/register/email`, `/v1/auth/register/email/verify`, `/v1/auth/register/complete` |
+| `/v1/auth/google` | Google sign-in |
+
+The old `/v1/auth/register` entry was replaced by `/v1/auth/register/**` when username/password registration was removed. `/v1/auth/refresh-token` is not listed. All `/v1/users/**` routes (including `/v1/users/me/**`) fall under `anyRequest().authenticated()`.
+
+### Google ID Token Verification
+
+`common/config/security/GoogleTokenVerifier.kt`, used by `GoogleAuthServiceImpl` for `POST /v1/auth/google`. The browser gets an ID token from the Google Identity Services button and posts it; there is no Spring `oauth2Login`, no server session, no redirect URI, and the client secret is unused.
+
+- `data class GoogleIdentity(sub: String, email: String, emailVerified: Boolean, name: String?, picture: String?)`
+- `interface GoogleTokenVerifier { fun verify(idToken: String): GoogleIdentity }`
+- `@Component class NimbusGoogleTokenVerifier(@Value("\${application.security.google.client-id}") clientId: String)`
+  - Decoder: `NimbusJwtDecoder.withJwkSetUri("https://www.googleapis.com/oauth2/v3/certs")` (from `spring-security-oauth2-jose`). Google's keys are fetched on first use and cached; no network call at startup.
+  - Validators (`DelegatingOAuth2TokenValidator`):
+    - `JwtTimestampValidator()` — `exp` / `nbf`
+    - `iss` must be `https://accounts.google.com` or `accounts.google.com` (Google issues both spellings)
+    - `aud` must contain `clientId`, and `clientId` must be non-blank (so an unset `GOOGLE_CLIENT_ID` rejects every token)
+  - Claims: `sub`, `email` (missing → invalid), `email_verified` (missing → `false`), `name`, `picture`.
+  - Any `JwtException` → `ResponseStatusException(401, "Invalid Google token")`.
+- `GoogleAuthServiceImpl` additionally rejects `emailVerified == false` with 401 `"Google account email is not verified"`, then applies the account-matching rules in [features/auth.md](../features/auth.md#google-sign-in--googleauthserviceimplsignin).
+- The verifier is an interface so unit tests (`GoogleAuthServiceImplTest`) mock it.
+
+### Password Login
+
+`AuthServiceImpl.auth()` looks the user up by email (case-insensitive) when the `username` field contains `@`, otherwise by username, and compares with `PasswordEncoder` (BCrypt). A missing user, a user without a password (Google-only account), and a wrong password all return 401 `"Invalid username or password"`. `JwtProvider.generateAccessToken(user)` then embeds the widened `UserResponse` (id, username, email, name, avatarUrl, role, emailVerified, pendingEmail) in the `user` claim; `JwtAuthFilter` still reads only `user.id` from that claim, so tokens issued before the change stay valid.
 
 ### Authentication Flow
 1. Client sends `access_token` header (NOT `Authorization: Bearer`)

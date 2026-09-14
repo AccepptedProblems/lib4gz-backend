@@ -23,6 +23,8 @@ CREATE TABLE users (
     name            VARCHAR(255)    NOT NULL,
     avatarUrl       TEXT,
     emailVerified   BOOLEAN         NOT NULL DEFAULT FALSE,
+    pending_email   VARCHAR(255),                       -- new email waiting for its one-time code
+    google_id       VARCHAR(255)    UNIQUE,             -- Google `sub`; set by Google sign-up or linking
     status          VARCHAR(20)     NOT NULL DEFAULT 'ACTIVE',
     createdAt       BIGINT          NOT NULL,
     updatedAt       BIGINT          NOT NULL,
@@ -31,6 +33,48 @@ CREATE TABLE users (
     CONSTRAINT chk_users_status CHECK (status IN ('ACTIVE', 'INACTIVE', 'BANNED'))
 );
 ```
+
+`pending_email` and `google_id` are added to existing databases by `ddl-auto=update`; check that the `google_id` unique constraint exists after the first boot. No data migration: existing rows keep `emailVerified = false`, `pending_email` and `google_id` NULL.
+
+### email_otps
+
+One-time email codes. **Hard-deleted** (transient credentials). New in the email/Google registration work; column names are the snake_case names mapped in `EmailOtp.kt`.
+
+```sql
+CREATE TABLE email_otps (
+    id              VARCHAR(50)     PRIMARY KEY,        -- otp_…
+    email           VARCHAR(255)    NOT NULL,
+    purpose         VARCHAR(30)     NOT NULL,
+    code_hash       VARCHAR(64)     NOT NULL,           -- SHA-256 hex, never the code itself
+    attempts        INTEGER         NOT NULL,
+    expires_at      BIGINT          NOT NULL,
+    created_at      BIGINT          NOT NULL,           -- reset on reissue; resend cooldown measured from it
+
+    CONSTRAINT uq_email_otps_email_purpose UNIQUE (email, purpose),
+    CONSTRAINT chk_email_otps_purpose CHECK (purpose IN ('REGISTER', 'EMAIL_CHANGE', 'LOGIN', 'PASSWORD_RESET'))
+);
+```
+
+At most one row per `(email, purpose)`. Reissuing a code updates that row in place; a correct code, an expired code, or too many attempts deletes it. The unique and check constraint names above are illustrative; Hibernate generates its own.
+
+### pending_registrations
+
+Sign-ups that proved their email (by code or by Google) but have not chosen a username yet. **Hard-deleted** on completion, when the same email starts again, or after expiry.
+
+```sql
+CREATE TABLE pending_registrations (
+    id              VARCHAR(50)     PRIMARY KEY,        -- reg_…, the browser's only credential
+    email           VARCHAR(255)    NOT NULL,
+    google_id       VARCHAR(255),                       -- NULL on the email path
+    name            VARCHAR(255),
+    avatar_url      TEXT,
+    email_verified  BOOLEAN         NOT NULL,
+    created_at      BIGINT          NOT NULL,
+    expires_at      BIGINT          NOT NULL            -- created_at + 15 min
+);
+```
+
+`RegistrationCleanupJob` deletes rows of `email_otps` and `pending_registrations` whose `expires_at` has passed, every 10 minutes. Neither table has a foreign key to `users`.
 
 ### user_global_roles
 
@@ -279,10 +323,33 @@ erDiagram
         VARCHAR(255) name
         TEXT avatarUrl
         BOOLEAN emailVerified
+        VARCHAR(255) pending_email
+        VARCHAR(255) google_id UK
         VARCHAR(20) status
         BIGINT createdAt
         BIGINT updatedAt
         BIGINT deletedAt
+    }
+
+    email_otps {
+        VARCHAR(50) id PK
+        VARCHAR(255) email
+        VARCHAR(30) purpose
+        VARCHAR(64) code_hash
+        INTEGER attempts
+        BIGINT expires_at
+        BIGINT created_at
+    }
+
+    pending_registrations {
+        VARCHAR(50) id PK
+        VARCHAR(255) email
+        VARCHAR(255) google_id
+        VARCHAR(255) name
+        TEXT avatar_url
+        BOOLEAN email_verified
+        BIGINT created_at
+        BIGINT expires_at
     }
 
     user_global_roles {
@@ -411,6 +478,8 @@ erDiagram
 | Table         | Soft Delete | Notes                                          |
 |---------------|-------------|-------------------------------------------------|
 | users         | Yes         | `deletedAt` column                              |
+| email_otps    | No          | Hard-deleted: consumed, expired, or swept       |
+| pending_registrations | No  | Hard-deleted: completed, restarted, or swept    |
 | courses       | Yes         | `deletedAt` column                              |
 | enrollments   | No          | Status-based lifecycle (PENDING/ACTIVE/INACTIVE)|
 | modules       | Yes         | `deletedAt` column                              |
@@ -428,6 +497,7 @@ erDiagram
 | Column                    | Allowed Values                                    |
 |---------------------------|---------------------------------------------------|
 | `users.status`            | `ACTIVE`, `INACTIVE`, `BANNED`                    |
+| `email_otps.purpose`      | `REGISTER`, `EMAIL_CHANGE`, `LOGIN` (reserved), `PASSWORD_RESET` (reserved) |
 | `user_global_roles.role`  | `ADMIN`, `USER`, `TEACHER`                          |
 | `courses.visibility`      | `PUBLIC`, `PRIVATE`                               |
 | `enrollments.role`        | `TEACHER`, `LEARNER`                              |

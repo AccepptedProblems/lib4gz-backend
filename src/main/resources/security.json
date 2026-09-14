@@ -1,7 +1,8 @@
 {
   "permittedEndpoints": [
     "/v1/auth/login",
-    "/v1/auth/register",
+    "/v1/auth/register/**",
+    "/v1/auth/google",
     "/v2/api-docs",
     "/v3/api-docs",
     "/v3/api-docs/**",

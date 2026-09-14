@@ -18,7 +18,9 @@ security:
 
 tags:
   - name: auth
-    description: Authentication and user registration
+    description: Login, email/Google registration, and Google sign-in
+  - name: users
+    description: The authenticated caller's profile, email confirmation, and courses
   - name: courses
     description: Course management
   - name: enrollments
@@ -179,20 +181,6 @@ components:
         - TEACHER
 
     # ---------- Auth ----------
-    UserCreationRequest:
-      type: object
-      required:
-        - username
-        - email
-        - password
-      properties:
-        username:
-          type: string
-        email:
-          type: string
-        password:
-          type: string
-
     LoginReq:
       type: object
       required:
@@ -201,6 +189,12 @@ components:
       properties:
         username:
           type: string
+          description: >
+            Username or email. A value containing "@" is looked up as an email
+            (case-insensitive); anything else as a username.
+          examples:
+            - alice
+            - alice@example.com
         password:
           type: string
 
@@ -209,10 +203,164 @@ components:
       properties:
         id:
           type: string
+          format: typeid
         username:
           type: string
         email:
           type: string
+        name:
+          type: string
+          description: Display name; falls back to username when blank
+        avatarUrl:
+          type:
+            - string
+            - "null"
+        role:
+          $ref: "#/components/schemas/UserRole"
+          description: Highest global role, ADMIN > TEACHER > USER
+        emailVerified:
+          type: boolean
+        pendingEmail:
+          type:
+            - string
+            - "null"
+          description: New email waiting for its one-time code
+
+    UpdateMeRequest:
+      type: object
+      properties:
+        name:
+          type:
+            - string
+            - "null"
+          description: Trimmed; blank is rejected
+        email:
+          type:
+            - string
+            - "null"
+          description: >
+            Trimmed and lowercased. A different address is stored as pendingEmail
+            and a code is sent to it; the current address clears pendingEmail.
+
+    MeCoursesResponse:
+      type: object
+      properties:
+        enrolled:
+          type: array
+          items:
+            $ref: "#/components/schemas/CourseResponse"
+        created:
+          type: array
+          items:
+            $ref: "#/components/schemas/CourseResponse"
+
+    StartEmailRegistrationRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+
+    VerifyEmailRegistrationRequest:
+      type: object
+      required:
+        - email
+        - code
+      properties:
+        email:
+          type: string
+        code:
+          type: string
+          pattern: "^\\d{6}$"
+
+    CompleteRegistrationRequest:
+      type: object
+      required:
+        - registrationId
+        - username
+      properties:
+        registrationId:
+          type: string
+          format: typeid
+          description: reg_… id from RegistrationStartedResponse
+        username:
+          type: string
+          minLength: 3
+          pattern: "^[a-zA-Z0-9]+$"
+        name:
+          type:
+            - string
+            - "null"
+          description: Blank or missing falls back to username
+        password:
+          type:
+            - string
+            - "null"
+          minLength: 8
+          description: Required on the email path; ignored on the Google path
+
+    OtpSentResponse:
+      type: object
+      properties:
+        email:
+          type: string
+        cooldownSeconds:
+          type: integer
+          format: int64
+          examples:
+            - 60
+
+    RegistrationStartedResponse:
+      type: object
+      properties:
+        registrationId:
+          type: string
+          format: typeid
+        email:
+          type: string
+        name:
+          type:
+            - string
+            - "null"
+        avatarUrl:
+          type:
+            - string
+            - "null"
+        requiresPassword:
+          type: boolean
+          description: true on the email path, false on the Google path
+
+    VerifyEmailCodeRequest:
+      type: object
+      required:
+        - code
+      properties:
+        code:
+          type: string
+          pattern: "^\\d{6}$"
+
+    GoogleSignInRequest:
+      type: object
+      required:
+        - idToken
+      properties:
+        idToken:
+          type: string
+          description: Credential from the Google Identity Services button
+
+    GoogleSignInResponse:
+      type: object
+      description: Exactly one of login and registration is non-null
+      properties:
+        login:
+          oneOf:
+            - $ref: "#/components/schemas/LoginResponse"
+            - type: "null"
+        registration:
+          oneOf:
+            - $ref: "#/components/schemas/RegistrationStartedResponse"
+            - type: "null"
 
     Token:
       type: object
@@ -875,41 +1023,35 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResp"
 
+    Conflict:
+      description: Conflict - username or email already in use
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResp"
+
+    ServiceUnavailable:
+      description: The one-time code email could not be sent
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResp"
+
 paths:
   # ========================================================================
   # AUTH
   # ========================================================================
-  /v1/auth/register:
-    post:
-      tags:
-        - auth
-      operationId: registerUser
-      summary: Register a new user
-      description: Creates a new user account with the provided credentials.
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UserCreationRequest"
-      responses:
-        "200":
-          description: User registered successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UserResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-
   /v1/auth/login:
     post:
       tags:
         - auth
       operationId: loginUser
       summary: Authenticate a user
-      description: Authenticates a user with username and password and returns a JWT access token.
+      description: >
+        Authenticates a user with username or email and password and returns a JWT
+        access token. The `username` field is treated as an email when it contains "@".
+        Unknown user, wrong password, and accounts without a password (Google-only)
+        all return 401 "Invalid username or password".
       security: []
       requestBody:
         required: true
@@ -926,6 +1068,309 @@ paths:
                 $ref: "#/components/schemas/LoginResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/auth/google:
+    post:
+      tags:
+        - auth
+      operationId: googleSignIn
+      summary: Sign in with a Google ID token
+      description: >
+        Verifies the Google ID token (signature from Google's JWKS, issuer
+        accounts.google.com or https://accounts.google.com, audience = GOOGLE_CLIENT_ID).
+        Matches a user by Google id, then by an email the account has verified (linking
+        the Google id) and returns `login`. An existing account whose email is not verified
+        gets 400. With no match a pending registration is created and returned as
+        `registration` (requiresPassword false); finish it with /v1/auth/register/complete.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoogleSignInRequest"
+      responses:
+        "200":
+          description: Logged in, or registration started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoogleSignInResponse"
+        "400":
+          description: >
+            Existing account with this email is not verified:
+            "Sign in with your password and verify your email in Profile first"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResp"
+        "401":
+          description: >
+            "Invalid Google token", or "Google account email is not verified"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResp"
+
+  /v1/auth/register/email:
+    post:
+      tags:
+        - auth
+      operationId: startEmailRegistration
+      summary: Send a sign-up code
+      description: >
+        Normalizes the email (trim, lowercase) and mails a 6-digit code (valid 10 minutes).
+        Calling again after the 60-second cooldown resends a new code.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartEmailRegistrationRequest"
+      responses:
+        "200":
+          description: Code sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtpSentResponse"
+        "400":
+          description: '"Invalid email", or "Please wait a minute before requesting another code"'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResp"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /v1/auth/register/email/verify:
+    post:
+      tags:
+        - auth
+      operationId: verifyEmailRegistration
+      summary: Confirm the sign-up code
+      description: >
+        Consumes the code and creates a pending registration (15-minute expiry),
+        replacing any older one for the same email.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyEmailRegistrationRequest"
+      responses:
+        "200":
+          description: Registration started (requiresPassword true)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegistrationStartedResponse"
+        "400":
+          description: >
+            "Invalid code", "Code expired or not found. Request a new one",
+            "Too many attempts. Request a new code" (after 5 wrong codes), or "Invalid email"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResp"
+
+  /v1/auth/register/complete:
+    post:
+      tags:
+        - auth
+      operationId: completeRegistration
+      summary: Create the account
+      description: >
+        Creates the user from a pending registration (email or Google path), deletes the
+        pending row, and logs the new user in. Password is required on the email path only.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteRegistrationRequest"
+      responses:
+        "200":
+          description: Account created and logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          description: >
+            "Username must be at least 3 letters or digits", or
+            "Password must be at least 8 characters"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResp"
+        "404":
+          description: '"Registration not found or expired"'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResp"
+        "409":
+          description: '"Username already taken", or "Email already in use"'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResp"
+
+  # ========================================================================
+  # USERS
+  # ========================================================================
+  /v1/users/me:
+    get:
+      tags:
+        - users
+      operationId: getMe
+      summary: Get the caller's account
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+      responses:
+        "200":
+          description: The caller's account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      tags:
+        - users
+      operationId: updateMe
+      summary: Update the caller's display name and/or email
+      description: >
+        A new email is not applied immediately: it is stored as pendingEmail and a code is
+        sent to it. Confirm with /v1/users/me/email/verify. Username cannot be changed.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMeRequest"
+      responses:
+        "200":
+          description: Updated account (with pendingEmail when an email change started)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          description: >
+            "Name must not be blank", "Email must not be blank", "Invalid email",
+            or the resend cooldown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResp"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /v1/users/me/email/verify:
+    post:
+      tags:
+        - users
+      operationId: verifyMyEmail
+      summary: Confirm the pending or current email
+      description: >
+        Checks the code against pendingEmail, or the current email when none is pending.
+        On success a pending email is swapped in and emailVerified becomes true.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyEmailCodeRequest"
+      responses:
+        "200":
+          description: Email confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          description: '"Invalid code", "Code expired or not found. Request a new one", or "Too many attempts. Request a new code"'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResp"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: The pending email was taken by another account in the meantime
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResp"
+
+  /v1/users/me/email/resend:
+    post:
+      tags:
+        - users
+      operationId: resendMyEmailCode
+      summary: Send a code to the pending or current email
+      description: >
+        Sends an EMAIL_CHANGE code to pendingEmail, or to the current email when it is not
+        verified yet (how existing accounts confirm their address). Body is `{}`.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+      responses:
+        "200":
+          description: Code sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtpSentResponse"
+        "400":
+          description: '"Email is already verified", or "Please wait a minute before requesting another code"'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResp"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /v1/users/me/courses:
+    get:
+      tags:
+        - users
+      operationId: getMyCourses
+      summary: The caller's enrolled and created courses
+      description: Replaces the removed /v1/me/courses. Combines type=enrolled and type=created in one response.
+      parameters:
+        - $ref: "#/components/parameters/XUserIdHeader"
+      responses:
+        "200":
+          description: Enrolled and created courses
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeCoursesResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
 

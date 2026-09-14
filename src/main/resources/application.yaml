@@ -24,6 +24,17 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
     open-in-view: false
 
+  # Gmail SMTP with an App Password. Leave MAIL_USERNAME unset locally: mail is then logged, not sent.
+  # Cloud Run blocks outbound port 25; 587 (STARTTLS) is open.
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+
 
 application:
   security:
@@ -32,3 +43,14 @@ application:
       expiration: 86400000 # a day
       refresh-token:
         expiration: 604800000 # 7 days
+    google:
+      # OAuth Web client id (public). Google ID tokens must carry it as their audience.
+      client-id: ${GOOGLE_CLIENT_ID:}
+  mail:
+    from: ${MAIL_USERNAME:no-reply@lib4gz.local}
+  registration:
+    pending-ttl-ms: 900000      # 15 min
+  otp:
+    ttl-ms: 600000              # 10 min
+    max-attempts: 5
+    resend-cooldown-ms: 60000
