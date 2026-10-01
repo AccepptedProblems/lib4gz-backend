@@ -4,7 +4,6 @@ import com.example.lib4gz.auth.model.entity.EmailOtp
 import com.example.lib4gz.auth.model.entity.OtpPurpose
 import com.example.lib4gz.auth.repo.EmailOtpRepo
 import com.example.lib4gz.common.exception.BusinessException
-import com.example.lib4gz.common.mail.EmailSender
 import com.example.lib4gz.common.utils.IdGenerator
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
@@ -18,8 +17,14 @@ import java.time.Instant
  * `Mono.fromCallable` + `TransactionTemplate` block.
  */
 interface OtpService {
-    /** Stores a fresh code for (email, purpose) and mails it. Throws while the resend cooldown runs. */
-    fun issue(email: String, purpose: OtpPurpose)
+    /** How long an issued code stays valid, for whoever words the message that carries it. */
+    val ttlMinutes: Long
+
+    /**
+     * Stores a fresh code for (email, purpose) and returns the plain code, for the caller to hand
+     * to `NotifierService`. Throws while the resend cooldown runs. Callers must never log it.
+     */
+    fun issue(email: String, purpose: OtpPurpose): String
 
     /** Consumes the code when it matches; otherwise throws [BusinessException]. */
     fun verify(email: String, purpose: OtpPurpose, code: String)
@@ -29,14 +34,15 @@ interface OtpService {
 @Transactional
 class OtpServiceImpl(
     private val repo: EmailOtpRepo,
-    private val emailSender: EmailSender,
     @Value("\${application.security.jwt.secret-key}") private val pepper: String,
     @Value("\${application.otp.ttl-ms}") private val ttlMs: Long,
     @Value("\${application.otp.max-attempts}") private val maxAttempts: Int,
     @Value("\${application.otp.resend-cooldown-ms}") private val resendCooldownMs: Long
 ) : OtpService {
 
-    override fun issue(email: String, purpose: OtpPurpose) {
+    override val ttlMinutes: Long get() = ttlMs / 60_000
+
+    override fun issue(email: String, purpose: OtpPurpose): String {
         val now = Instant.now().toEpochMilli()
         val existing = repo.findByEmailAndPurpose(email, purpose)
         if (existing != null && now - existing.createdAt < resendCooldownMs) {
@@ -53,8 +59,7 @@ class OtpServiceImpl(
         otp.expiresAt = now + ttlMs
         repo.save(otp)
 
-        // Sent inside the transaction so a mail failure rolls the row back.
-        emailSender.send(email, subject(purpose), body(purpose, code))
+        return code
     }
 
     // REQUIRES_NEW + noRollbackFor: a wrong guess must commit `attempts++` even though it throws
@@ -85,17 +90,4 @@ class OtpServiceImpl(
         MessageDigest.getInstance("SHA-256")
             .digest("$pepper:$email:$purpose:$code".toByteArray())
             .joinToString("") { "%02x".format(it) }
-
-    private fun subject(purpose: OtpPurpose) = when (purpose) {
-        OtpPurpose.REGISTER -> "Your Lib4GZ sign-up code"
-        OtpPurpose.EMAIL_CHANGE -> "Confirm your Lib4GZ email"
-        OtpPurpose.LOGIN -> "Your Lib4GZ sign-in code"
-        OtpPurpose.PASSWORD_RESET -> "Reset your Lib4GZ password"
-    }
-
-    private fun body(purpose: OtpPurpose, code: String) = """
-        |${subject(purpose)}: $code
-        |
-        |The code expires in ${ttlMs / 60_000} minutes. If you did not ask for it, ignore this email.
-    """.trimMargin()
 }

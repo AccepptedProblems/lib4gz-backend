@@ -30,10 +30,7 @@ data class RegistrationStartedResponse(
     val requiresPassword: Boolean
 )
 
-data class VerifyEmailCodeRequest(
-    val code: String
-)
-
+/** Body of both `google:sign-in` and `google:connect`. */
 data class GoogleSignInRequest(
     /** The credential the Google Identity Services button hands the browser. */
     val idToken: String

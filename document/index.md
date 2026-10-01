@@ -124,9 +124,10 @@ YAML model definitions for all entities, enums, DTOs, and mappers. Referenced by
 | Domain                    | Capabilities                                                        |
 | ------------------------- | ------------------------------------------------------------------- |
 | **Registration**          | Email + 6-digit one-time code, then choose username / name / password (`/v1/auth/register/**`); username/password `POST /v1/auth/register` removed |
-| **Google sign-in**        | `POST /v1/auth/google` with a Google ID token: log in, link a verified account, or start a registration |
-| **Profile**               | `GET`/`PATCH /v1/users/me`, email change and confirmation by code (`/v1/users/me/email/verify`, `/resend`), `GET /v1/users/me/courses` (replaces `/v1/me/courses`) |
-| **Email**                 | Gmail SMTP sender for one-time codes; logs mail instead when `MAIL_USERNAME` is unset |
+| **Google sign-in**        | `POST /v1/auth/google:sign-in` with a Google ID token: log in the account connected to that Google id, or start a registration. An existing account with the same email is refused, never joined |
+| **Google connect**        | `POST /v1/auth/google:connect` (JWT): connects or switches the caller's Google account and takes email, verified flag and avatar from it. The only way an email changes |
+| **Profile**               | `GET`/`PATCH /v1/users/me` (display name only), `GET /v1/users/me/courses` (replaces `/v1/me/courses`) |
+| **Email**                 | One-time codes sent by the provider `MAIL_PROVIDER` names: `brevo` over Brevo's HTTP API, or `log` (the default), which writes the mail and its code to the console |
 
 ### Deferred
 

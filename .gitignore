@@ -41,3 +41,8 @@ out/
 
 ### Deploy scripts (contains project config) ###
 deploy/
+
+### Local secrets ###
+.env
+.env.*
+!.env.example

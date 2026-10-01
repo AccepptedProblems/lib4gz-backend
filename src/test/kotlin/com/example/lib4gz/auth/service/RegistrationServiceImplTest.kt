@@ -11,6 +11,7 @@ import com.example.lib4gz.common.config.security.JwtProvider
 import com.example.lib4gz.common.exception.BusinessException
 import com.example.lib4gz.common.exception.ResourceNotFoundException
 import com.example.lib4gz.common.exception.ValidationException
+import com.example.lib4gz.common.notification.NotifierService
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -20,6 +21,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.AdditionalAnswers.returnsFirstArg
 import org.mockito.ArgumentCaptor
+import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
@@ -36,11 +38,13 @@ class RegistrationServiceImplTest {
     private val userRepo = mock(UserRepo::class.java)
     private val pendingRepo = mock(PendingRegistrationRepo::class.java)
     private val otpService = mock(OtpService::class.java)
+    private val notifierService = mock(NotifierService::class.java)
     private val passwordEncoder = BCryptPasswordEncoder(4)
     private val service = RegistrationServiceImpl(
         userRepo = userRepo,
         pendingRepo = pendingRepo,
         otpService = otpService,
+        notifierService = notifierService,
         passwordEncoder = passwordEncoder,
         jwtProvider = JwtProvider(TEST_JWT_SECRET, 60_000, 60_000),
         transactionTemplate = passThroughTransactionTemplate(),
@@ -51,6 +55,8 @@ class RegistrationServiceImplTest {
     private val now get() = Instant.now().toEpochMilli()
 
     init {
+        `when`(otpService.issue(anyValue(), anyValue())).thenReturn("123456")
+        `when`(otpService.ttlMinutes).thenReturn(10)
         `when`(userRepo.save(anyValue<User>())).then(returnsFirstArg<User>())
         `when`(pendingRepo.save(anyValue<PendingRegistration>())).then(returnsFirstArg<PendingRegistration>())
     }
@@ -64,6 +70,17 @@ class RegistrationServiceImplTest {
         assertEquals("new@x.com", response.email)
         assertEquals(60, response.cooldownSeconds)
         verify(otpService).issue("new@x.com", REGISTER)
+        verify(notifierService).sendRegistrationOtp("new@x.com", "123456", 10)
+    }
+
+    @Test
+    fun `startEmail reports a delivery failure, so the stored code rolls back with it`() {
+        doThrow(ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Could not send email"))
+            .`when`(notifierService).sendRegistrationOtp("new@x.com", "123456", 10)
+
+        val ex = assertThrows(ResponseStatusException::class.java) { service.startEmail("new@x.com").block() }
+
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, ex.statusCode)
     }
 
     @Test
@@ -81,6 +98,7 @@ class RegistrationServiceImplTest {
         assertEquals(HttpStatus.CONFLICT, ex.statusCode)
         assertEquals("Email already in use", ex.reason)
         verify(otpService, never()).issue(anyValue(), anyValue())
+        verify(notifierService, never()).sendRegistrationOtp(anyValue(), anyValue(), anyLong())
     }
 
     // ---- verifyEmail ----

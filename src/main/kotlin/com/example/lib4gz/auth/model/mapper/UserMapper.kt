@@ -12,7 +12,7 @@ fun User.toResponse() = UserResponse(
     avatarUrl = avatarUrl,
     role = primaryRole(),
     emailVerified = emailVerified,
-    pendingEmail = pendingEmail
+    googleConnected = googleId != null
 )
 
 /** The single role the frontend shows: ADMIN > TEACHER > USER. */

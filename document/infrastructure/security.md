@@ -121,7 +121,7 @@ See [Google ID token verification](#google-id-token-verification) below.
 ### security.json (src/main/resources/security.json)
 ```json
 {
-  "permittedEndpoints": ["/v1/auth/login", "/v1/auth/register/**", "/v1/auth/google", "/v2/api-docs", "/v3/api-docs", "/v3/api-docs/**", "/swagger-resources", "/swagger-resources/**", "/configuration/ui", "/configuration/security", "/swagger-ui/**", "/webjars/**", "/swagger-ui.html", "/error"],
+  "permittedEndpoints": ["/v1/auth/login", "/v1/auth/register/**", "/v1/auth/google:sign-in", "/v2/api-docs", "/v3/api-docs", "/v3/api-docs/**", "/swagger-resources", "/swagger-resources/**", "/configuration/ui", "/configuration/security", "/swagger-ui/**", "/webjars/**", "/swagger-ui.html", "/error"],
   "authorizedEndpoints": [],
   "corsSettings": {
     "allowedOrigins": ["http://localhost:3000", "http://localhost:3001"],
@@ -139,13 +139,15 @@ Public auth routes:
 |---------|--------|
 | `/v1/auth/login` | Password login (username or email) |
 | `/v1/auth/register/**` | `/v1/auth/register/email`, `/v1/auth/register/email/verify`, `/v1/auth/register/complete` |
-| `/v1/auth/google` | Google sign-in |
+| `/v1/auth/google:sign-in` | Google sign-in |
 
 The old `/v1/auth/register` entry was replaced by `/v1/auth/register/**` when username/password registration was removed. `/v1/auth/refresh-token` is not listed. All `/v1/users/**` routes (including `/v1/users/me/**`) fall under `anyRequest().authenticated()`.
 
+**`/v1/auth/google:connect` is deliberately not permitted.** It is the only handler in `AuthController` that acts on an existing account (it connects or switches the caller's Google account), so it takes `X-User-Id` and needs a token like any `/v1/users/**` route. The pattern is the full `google:sign-in`, not `google`, so the two never collide. The frontend's `jwtInterceptor` keeps the same distinction on its side.
+
 ### Google ID Token Verification
 
-`common/config/security/GoogleTokenVerifier.kt`, used by `GoogleAuthServiceImpl` for `POST /v1/auth/google`. The browser gets an ID token from the Google Identity Services button and posts it; there is no Spring `oauth2Login`, no server session, no redirect URI, and the client secret is unused.
+`common/config/security/GoogleTokenVerifier.kt`, used by `GoogleAuthServiceImpl` for both `POST /v1/auth/google:sign-in` and `POST /v1/auth/google:connect`. The browser gets an ID token from the Google Identity Services button and posts it; there is no Spring `oauth2Login`, no server session, no redirect URI, and the client secret is unused.
 
 - `data class GoogleIdentity(sub: String, email: String, emailVerified: Boolean, name: String?, picture: String?)`
 - `interface GoogleTokenVerifier { fun verify(idToken: String): GoogleIdentity }`
@@ -162,7 +164,7 @@ The old `/v1/auth/register` entry was replaced by `/v1/auth/register/**` when us
 
 ### Password Login
 
-`AuthServiceImpl.auth()` looks the user up by email (case-insensitive) when the `username` field contains `@`, otherwise by username, and compares with `PasswordEncoder` (BCrypt). A missing user, a user without a password (Google-only account), and a wrong password all return 401 `"Invalid username or password"`. `JwtProvider.generateAccessToken(user)` then embeds the widened `UserResponse` (id, username, email, name, avatarUrl, role, emailVerified, pendingEmail) in the `user` claim; `JwtAuthFilter` still reads only `user.id` from that claim, so tokens issued before the change stay valid.
+`AuthServiceImpl.auth()` looks the user up by email (case-insensitive) when the `username` field contains `@`, otherwise by username, and compares with `PasswordEncoder` (BCrypt). A missing user, a user without a password (Google-only account), and a wrong password all return 401 `"Invalid username or password"`. `JwtProvider.generateAccessToken(user)` then embeds the widened `UserResponse` (id, username, email, name, avatarUrl, role, emailVerified, googleConnected) in the `user` claim; `JwtAuthFilter` still reads only `user.id` from that claim, so tokens issued before the change stay valid.
 
 ### Authentication Flow
 1. Client sends `access_token` header (NOT `Authorization: Bearer`)

@@ -39,11 +39,12 @@ enums:
     file: EmailOtp.kt
     values:
       - REGISTER
-      - EMAIL_CHANGE
       - LOGIN
       - PASSWORD_RESET
     notes:
       - "LOGIN and PASSWORD_RESET are reserved; no endpoint issues them yet."
+      - "EMAIL_VERIFICATION (earlier EMAIL_CHANGE) was removed on 2026-09-16 with the profile's code flow; the email now comes from the connected Google account."
+      - "Stored as TEXT, guarded by the check constraint email_otps_purpose_check. Adding or renaming a value needs a Flyway migration that recreates the constraint: V2 renamed EMAIL_CHANGE, V3 removed EMAIL_VERIFICATION."
 
 entity:
   User:
@@ -70,7 +71,7 @@ entity:
         annotations:
           - "@Column(nullable = true, unique = true, length = 255)"
         notes:
-          - "var so a confirmed email change can swap pendingEmail in. Stored lowercased by new code; looked up case-insensitively."
+          - "var because connecting a Google account replaces it with that account's address. Stored lowercased; looked up case-insensitively."
       username:
         type: String
         mutability: val
@@ -110,14 +111,6 @@ entity:
         default: "false"
         annotations:
           - "@Column(name = \"email_verified\", nullable = false)"
-      pendingEmail:
-        type: String?
-        mutability: var
-        default: "null"
-        annotations:
-          - "@Column(name = \"pending_email\", length = 255)"
-        notes:
-          - "New address waiting for its EMAIL_CHANGE code; swapped into email once confirmed."
       googleId:
         type: String?
         mutability: var
@@ -125,7 +118,7 @@ entity:
         annotations:
           - "@Column(name = \"google_id\", unique = true, length = 255)"
         notes:
-          - "Google `sub` claim. Set at Google registration, or when Google sign-in links an account with a verified matching email."
+          - "Google `sub` claim. Set at Google registration, or by POST /v1/auth/google:connect (which also replaces email, emailVerified and avatarUrl). Sign-in only reads it."
       status:
         type: UserStatus
         mutability: var
@@ -305,10 +298,10 @@ schemas:
         description: "Highest global role: ADMIN > TEACHER > USER."
       emailVerified:
         type: boolean
-      pendingEmail:
-        type: string
-        nullable: true
-        description: "New email waiting for its code, or null."
+        description: "Set by sign-up with a code or by connecting a Google account."
+      googleConnected:
+        type: boolean
+        description: "googleId != null; the email is that Google account's address."
 
   UpdateMeRequest:
     package: com.example.lib4gz.auth.model.payload
@@ -318,11 +311,7 @@ schemas:
       name:
         type: string
         nullable: true
-        description: "Trimmed; blank -> 400."
-      email:
-        type: string
-        nullable: true
-        description: "Trimmed and lowercased; a different address becomes pendingEmail and a code is sent."
+        description: "Trimmed; blank -> 400. The email is not accepted here; see POST /v1/auth/google:connect."
 
   MeCoursesResponse:
     package: com.example.lib4gz.auth.model.payload
@@ -453,16 +442,6 @@ schemas:
         type: boolean
         description: "true on the email path, false on the Google path."
 
-  VerifyEmailCodeRequest:
-    package: com.example.lib4gz.auth.model.payload
-    file: RegistrationPayload.kt
-    type: object
-    required:
-      - code
-    properties:
-      code:
-        type: string
-
   GoogleSignInRequest:
     package: com.example.lib4gz.auth.model.payload
     file: RegistrationPayload.kt
@@ -504,7 +483,7 @@ mapper:
           avatarUrl: avatarUrl
           role: "isAdmin() -> ADMIN, isTeacher() -> TEACHER, else USER"
           emailVerified: emailVerified
-          pendingEmail: pendingEmail
+          googleConnected: "googleId != null"
 
   RegistrationMapper:
     package: com.example.lib4gz.auth.model.mapper

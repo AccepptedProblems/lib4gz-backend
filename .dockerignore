@@ -4,3 +4,6 @@ build
 *.iml
 deploy
 .git
+.env
+.env.*
+!.env.example

@@ -34,12 +34,9 @@ data class User(
     @Column(name = "role")
     val roles: MutableSet<UserRole> = mutableSetOf(UserRole.USER),
 
+    // Set by sign-up with a code or by connecting a Google account; the profile cannot edit the email.
     @Column(name = "email_verified", nullable = false)
     var emailVerified: Boolean = false,
-
-    // New address waiting for its one-time code; swapped into `email` once confirmed.
-    @Column(name = "pending_email", length = 255)
-    var pendingEmail: String? = null,
 
     @Column(name = "google_id", unique = true, length = 255)
     var googleId: String? = null,

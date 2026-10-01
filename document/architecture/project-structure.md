@@ -122,6 +122,15 @@ src/main/kotlin/com/example/lib4gz/
     │   ├── ResourceNotFoundException.kt
     │   ├── UnauthorizedException.kt
     │   └── ValidationException.kt
+    ├── notification/
+    │   ├── NotifierService.kt             # interface + impl; owns the wording of every message
+    │   └── email/
+    │       ├── EmailSender.kt             # send(to, subject, body); transport only
+    │       ├── MailProperties.kt          # MailProvider enum + application.mail binding
+    │       ├── LoggingEmailSender.kt      # provider `log` (default): mail goes to the console
+    │       └── brevo/
+    │           ├── BrevoProperties.kt     # application.mail.brevo (api-key)
+    │           └── BrevoEmailSender.kt    # provider `brevo`: POST /v3/smtp/email
     └── utils/
         └── IdGenerator.kt
 ```
@@ -139,7 +148,7 @@ src/main/resources/
 
 ### `auth`
 
-Handles accounts: password login (username or email), email-code and Google registration, the caller's profile and email change, and JWT token generation. The `User` entity holds global roles, account status, email verification, and the linked Google id. Mail goes through `common/mail/EmailSender`; Google ID tokens are checked by `common/config/security/GoogleTokenVerifier`.
+Handles accounts: password login (username or email), email-code and Google registration, the caller's profile and email change, and JWT token generation. The `User` entity holds global roles, account status, email verification, and the linked Google id. Outgoing mail goes through `common/notification`: `NotifierService` owns the wording, `EmailSender` only carries it, and `application.mail.provider` picks which sender is in the context; Google ID tokens are checked by `common/config/security/GoogleTokenVerifier`.
 
 ### `courses`
 
@@ -173,4 +182,5 @@ Shared infrastructure:
 - **config/common/**: Request header constants (`PZRequestHeader`), mutable request wrapper
 - **config/error/**: Global exception handler, error response DTO
 - **exception/**: Custom exception classes used throughout the application
+- **notification/**: `NotifierService` decides what each message says; `notification/email/` delivers it. `application.mail.provider` selects the one `EmailSender` bean -- `log` writes the mail to the console, `brevo` posts it to Brevo's HTTP API
 - **utils/**: Utility classes (ID generation)

@@ -38,9 +38,12 @@ class EmailOtp(
     var createdAt: Long = Instant.now().toEpochMilli()
 )
 
+/**
+ * Stored as text, and `email_otps.purpose` carries a check constraint listing these values: adding
+ * or renaming one needs a migration (see V2 and V3). LOGIN and PASSWORD_RESET are reserved.
+ */
 enum class OtpPurpose {
     REGISTER,
-    EMAIL_CHANGE,
     LOGIN,
     PASSWORD_RESET
 }

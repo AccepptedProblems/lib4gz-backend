@@ -11,12 +11,12 @@ data class UserResponse(
     val avatarUrl: String?,
     val role: UserRole,
     val emailVerified: Boolean,
-    val pendingEmail: String?
+    /** A Google account signs this user in; the email is that account's address. */
+    val googleConnected: Boolean
 )
 
 data class UpdateMeRequest(
-    val name: String? = null,
-    val email: String? = null
+    val name: String? = null
 )
 
 /**

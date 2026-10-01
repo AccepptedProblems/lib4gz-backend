@@ -1,5 +1,6 @@
 package com.example.lib4gz.common.config.error
 
+import com.example.lib4gz.common.exception.BadRequestException
 import com.example.lib4gz.common.exception.BusinessException
 import com.example.lib4gz.common.exception.ResourceNotFoundException
 import com.example.lib4gz.common.exception.UnauthorizedException
@@ -10,7 +11,6 @@ import jakarta.servlet.http.HttpServletRequest
 import lombok.extern.slf4j.Slf4j
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import org.springframework.http.HttpRequest
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.authentication.InsufficientAuthenticationException
@@ -25,7 +25,11 @@ import java.time.Instant
 import java.util.*
 
 /**
- * GlobalExceptionHandler will wrap all exception and provide meaningful messages to clients.
+ * Maps exceptions to the `ErrorResp` envelope. The rule for what goes on the wire: text the code wrote
+ * for a person (a `BusinessException` message, a `ResponseStatusException` reason) is passed through;
+ * text that describes what failed inside (an exception message, a cause, a URL) goes to the log under the
+ * request id and the client gets a fixed sentence instead. An exception message has carried SQL and table
+ * names onto a screen before.
  */
 
 @Slf4j
@@ -59,8 +63,8 @@ class GlobalExceptionHandler {
                 }
 
                 else -> {
-                    val message = if (ex.reason != null && ex.reason!!.isNotEmpty()) ex.reason else c.message
-                    resp.addError(GenericError(message))
+                    // Only the reason was written for a person; the cause's message is whatever blew up.
+                    resp.addError(GenericError(ex.reason?.takeIf { it.isNotBlank() } ?: INVALID_REQUEST))
                 }
             }
         } else {
@@ -88,14 +92,17 @@ class GlobalExceptionHandler {
         return ResponseEntity<ErrorResp?>(resp, HttpStatus.BAD_REQUEST)
     }
 
+    /**
+     * A request with no valid token. Spring's own message ("Full authentication is required to access
+     * this resource") is framework wording; the person is told to sign in.
+     */
     @ExceptionHandler(InsufficientAuthenticationException::class)
     fun handleAuthenticationException(
         ex: InsufficientAuthenticationException, request: HttpServletRequest
     ): ResponseEntity<ErrorResp?> {
-        val logger = LoggerFactory.getLogger(GlobalExceptionHandler::class.java)
-        logger.error(ex.message)
+        logger.error("Unauthenticated {} {}: {}", request.method, request.servletPath, ex.message)
         val resp: ErrorResp = buildErrorResp(request, HttpStatus.UNAUTHORIZED)
-        resp.addError(GenericError(ex.message))
+        resp.addError(GenericError(SIGN_IN_REQUIRED))
 //        logErrors(request, resp)
         return ResponseEntity<ErrorResp?>(resp, HttpStatus.UNAUTHORIZED)
     }
@@ -153,7 +160,21 @@ class GlobalExceptionHandler {
     }
 
     /**
-     * Handle exception caused by invalid data input format.
+     * Handle BadRequestException - a state change the entity refuses, worded for the caller.
+     */
+    @ExceptionHandler(BadRequestException::class)
+    fun handleBadRequestException(
+        ex: BadRequestException, request: HttpServletRequest
+    ): ResponseEntity<ErrorResp> {
+        logger.error("Bad request: ${ex.message}")
+        val resp: ErrorResp = buildErrorResp(request, HttpStatus.BAD_REQUEST)
+        resp.addError(GenericError(ex.message))
+        return ResponseEntity(resp, HttpStatus.BAD_REQUEST)
+    }
+
+    /**
+     * Handle a failed call to another service. Which call, and why, is logged; the client is told only
+     * that something failed on our side.
      *
      * @param e       WebClientException
      * @param request ServerHttpRequest
@@ -163,27 +184,18 @@ class GlobalExceptionHandler {
     fun handleWebClientException(
         e: WebClientException, request: HttpServletRequest
     ): ResponseEntity<ErrorResp> {
-        val finalEx = getFinalCause(e)
-        logger.error(e.message)
-        var finalErrorMessage = finalEx!!.message
-        if (finalErrorMessage == null) {
-            logger.error(finalEx.javaClass.name)
-            finalErrorMessage = finalEx.javaClass.simpleName
-        }
-        logger.error(finalErrorMessage)
         val resp: ErrorResp = buildErrorResp(request, HttpStatus.INTERNAL_SERVER_ERROR)
-        if (e is WebClientResponseException) {
-            val req: HttpRequest? = e.request
-            if (req != null) {
-                val message = "${req.method.name()} ${req.uri} failed. Root cause: $finalErrorMessage"
-                logger.error(message)
-                resp.addError(GenericError(message))
-            }
-        } else if (e is WebClientRequestException) {
-            val message = "${e.method} ${e.uri} failed. Root cause: $finalErrorMessage"
-            logger.error(message)
-            resp.addError(GenericError(message))
+        val target = when (e) {
+            is WebClientResponseException -> e.request?.let { "${it.method.name()} ${it.uri}" }
+            is WebClientRequestException -> "${e.method} ${e.uri}"
+            else -> null
         }
+        val finalEx = getFinalCause(e)
+        logger.error(
+            "Upstream call {} failed (requestId {}): {}",
+            target ?: "<unknown>", resp.requestId, finalEx?.message ?: finalEx?.javaClass?.simpleName, e
+        )
+        resp.addError(GenericError(UNEXPECTED_ERROR))
         return ResponseEntity<ErrorResp>(resp, HttpStatus.INTERNAL_SERVER_ERROR)
     }
 
@@ -213,21 +225,20 @@ class GlobalExceptionHandler {
     }
 
     /**
-     * Process all unexpected errors.
+     * Process all unexpected errors. The exception, its cause chain and the stack go to the log under
+     * the request id; the client gets one sentence a person can read.
      *
      * @param request original ServerHttpRequest Request
      * @return ErrorResp
      */
     @ExceptionHandler(Exception::class)
     fun handleException(ex: Exception, request: HttpServletRequest): ResponseEntity<ErrorResp> {
-        println("This is exception")
-        getFinalCause(ex)
-        logger.error(ex.javaClass.name)
         val resp: ErrorResp = buildErrorResp(request, HttpStatus.INTERNAL_SERVER_ERROR)
-        resp.addError(
-            GenericError(ex.message)
+        logger.error(
+            "Unhandled {} on {} {} (requestId {})",
+            ex.javaClass.name, request.method, request.servletPath, resp.requestId, ex
         )
-
+        resp.addError(GenericError(UNEXPECTED_ERROR))
         return ResponseEntity<ErrorResp>(resp, HttpStatus.INTERNAL_SERVER_ERROR)
     }
 
@@ -284,5 +295,16 @@ class GlobalExceptionHandler {
             x = x.cause
         }
         return x
+    }
+
+    companion object {
+        /** What a client is told when the server itself failed. The detail is in the log, never on the wire. */
+        const val UNEXPECTED_ERROR = "Something went wrong on our side. Please try again."
+
+        /** A 400 with no reason of its own. */
+        const val INVALID_REQUEST = "Invalid request"
+
+        /** A request without a valid token. */
+        const val SIGN_IN_REQUIRED = "Please sign in to continue"
     }
 }

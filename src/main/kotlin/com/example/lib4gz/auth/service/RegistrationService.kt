@@ -15,6 +15,7 @@ import com.example.lib4gz.auth.repo.UserRepo
 import com.example.lib4gz.common.config.security.JwtProvider
 import com.example.lib4gz.common.exception.ResourceNotFoundException
 import com.example.lib4gz.common.exception.ValidationException
+import com.example.lib4gz.common.notification.NotifierService
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.security.crypto.password.PasswordEncoder
@@ -43,6 +44,7 @@ class RegistrationServiceImpl(
     private val userRepo: UserRepo,
     private val pendingRepo: PendingRegistrationRepo,
     private val otpService: OtpService,
+    private val notifierService: NotifierService,
     private val passwordEncoder: PasswordEncoder,
     private val jwtProvider: JwtProvider,
     private val transactionTemplate: TransactionTemplate,
@@ -57,7 +59,9 @@ class RegistrationServiceImpl(
                 if (userRepo.existsByEmailIgnoreCase(normalized)) {
                     throw ResponseStatusException(HttpStatus.CONFLICT, "Email already in use")
                 }
-                otpService.issue(normalized, OtpPurpose.REGISTER)
+                val code = otpService.issue(normalized, OtpPurpose.REGISTER)
+                // Sent inside the transaction, so a delivery failure rolls the stored code back.
+                notifierService.sendRegistrationOtp(normalized, code, otpService.ttlMinutes)
             }
             OtpSentResponse(normalized, resendCooldownMs / 1000)
         }.subscribeOn(Schedulers.boundedElastic())

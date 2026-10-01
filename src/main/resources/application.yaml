@@ -2,11 +2,14 @@ server:
   servlet:
     context-path: /api
   error:
-    include-message: always
+    include-message: never   # exception text never leaves the server; GlobalExceptionHandler logs it
 
 spring:
   application:
     name: Z_Lib4gz_Backend
+  # Local secrets (git-ignored); see .env.example. Real environment variables take precedence.
+  config:
+    import: optional:file:.env[.properties]
 
   datasource:
     url: jdbc:postgresql://db.${SUPABASE_PROJECT_REF}.supabase.co:5432/postgres?sslmode=require
@@ -14,9 +17,18 @@ spring:
     password: ${SUPABASE_DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
+  # Flyway owns the schema (src/main/resources/db/migration). It runs before Hibernate starts.
+  flyway:
+    # A database whose tables predate Flyway is recorded as version 1 (V1__baseline.sql) instead of
+    # failing; later migrations then run on top. An empty database runs V1 like any other migration.
+    baseline-on-migrate: true
+    baseline-version: 1
+
   jpa:
     hibernate:
-      ddl-auto: update
+      # Hibernate only checks that the entities match the tables, and refuses to start if they don't.
+      # Change the schema with a new migration file, never through Hibernate.
+      ddl-auto: validate
     show-sql: true
     properties:
       hibernate:
@@ -24,30 +36,27 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
     open-in-view: false
 
-  # Gmail SMTP with an App Password. Leave MAIL_USERNAME unset locally: mail is then logged, not sent.
-  # Cloud Run blocks outbound port 25; 587 (STARTTLS) is open.
-  mail:
-    host: smtp.gmail.com
-    port: 587
-    username: ${MAIL_USERNAME:}
-    password: ${MAIL_PASSWORD:}
-    properties:
-      mail.smtp.auth: true
-      mail.smtp.starttls.enable: true
-
 
 application:
   security:
     jwt:
-      secret-key: ${JWT_SECRET_KEY:404E635266556A586E3272357F4428472B4B6250645367566B5970}
+      secret-key: ${JWT_SECRET_KEY}
       expiration: 86400000 # a day
       refresh-token:
         expiration: 604800000 # 7 days
     google:
       # OAuth Web client id (public). Google ID tokens must carry it as their audience.
       client-id: ${GOOGLE_CLIENT_ID:}
+  # Which provider sends mail, and what every provider needs. Only the credentials live under the
+  # provider's own name. Switching provider is a new secret, a new MAIL_PROVIDER, and a redeploy.
   mail:
-    from: ${MAIL_USERNAME:no-reply@lib4gz.local}
+    provider: ${MAIL_PROVIDER:log}     # log | brevo. Unset means codes are printed to the console.
+    from:
+      name: ${MAIL_FROM_NAME:Lib4GZ}
+      address: ${MAIL_FROM_ADDRESS:}   # must be a sender verified at the provider
+    timeout-ms: 10000                  # connect and response timeout for every provider
+    brevo:
+      api-key: ${BREVO_API_KEY:}
   registration:
     pending-ttl-ms: 900000      # 15 min
   otp:

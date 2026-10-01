@@ -24,7 +24,6 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-web")
 	implementation("org.springframework.boot:spring-boot-starter-webflux")
 	implementation("org.springframework.boot:spring-boot-starter-security")
-	implementation("org.springframework.boot:spring-boot-starter-mail")
 	// NimbusJwtDecoder, used to verify Google ID tokens
 	implementation("org.springframework.security:spring-security-oauth2-jose")
 
@@ -43,6 +42,9 @@ dependencies {
 
 	// Database
 	runtimeOnly("org.postgresql:postgresql")
+	// Schema migrations: src/main/resources/db/migration
+	implementation("org.flywaydb:flyway-core")
+	runtimeOnly("org.flywaydb:flyway-database-postgresql")
 
 	// TypeID: UUIDv7 generation for type-prefixed IDs
 	implementation("com.github.f4b6a3:uuid-creator:6.0.0")

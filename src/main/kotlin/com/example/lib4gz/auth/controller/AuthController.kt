@@ -8,10 +8,12 @@ import com.example.lib4gz.auth.model.payload.LoginResponse
 import com.example.lib4gz.auth.model.payload.OtpSentResponse
 import com.example.lib4gz.auth.model.payload.RegistrationStartedResponse
 import com.example.lib4gz.auth.model.payload.StartEmailRegistrationRequest
+import com.example.lib4gz.auth.model.payload.UserResponse
 import com.example.lib4gz.auth.model.payload.VerifyEmailRegistrationRequest
 import com.example.lib4gz.auth.service.AuthService
 import com.example.lib4gz.auth.service.GoogleAuthService
 import com.example.lib4gz.auth.service.RegistrationService
+import com.example.lib4gz.common.config.common.PZRequestHeader
 import org.springframework.web.bind.annotation.*
 import reactor.core.publisher.Mono
 
@@ -27,9 +29,19 @@ class AuthController(
         return authService.auth(loginReq)
     }
 
-    @PostMapping("/google")
+    // The two Google actions are custom methods on one resource, hence the colon.
+    @PostMapping("/google:sign-in")
     fun googleSignIn(@RequestBody request: GoogleSignInRequest): Mono<GoogleSignInResponse> {
         return googleAuthService.signIn(request.idToken)
+    }
+
+    /** Needs a token, unlike everything else here: it changes the caller's own account. */
+    @PostMapping("/google:connect")
+    fun googleConnect(
+        @RequestHeader(PZRequestHeader.USER_ID) userId: String,
+        @RequestBody request: GoogleSignInRequest
+    ): Mono<UserResponse> {
+        return googleAuthService.connect(userId, request.idToken)
     }
 
     @PostMapping("/register/email")

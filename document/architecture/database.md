@@ -7,6 +7,10 @@
 - **Timestamps**: All stored as `BIGINT` epoch milliseconds (camelCase naming: `createdAt`, `updatedAt`)
 - **Soft Delete**: `deletedAt BIGINT` column (NULL means active, non-NULL means deleted)
 - **JSONB**: Used for flexible metadata (course settings, question meta, exercise settings)
+- **Migrations**: Flyway, files in `src/main/resources/db/migration/`. They are the source of truth
+  for the schema; the DDL below is descriptive and partly out of date (it predates the snake_case
+  column names). Hibernate runs with `ddl-auto: validate`. Rules for adding a migration are in
+  [configuration.md](../infrastructure/configuration.md#schema-migrations-springflyway-dbmigration).
 
 ---
 
@@ -23,8 +27,7 @@ CREATE TABLE users (
     name            VARCHAR(255)    NOT NULL,
     avatarUrl       TEXT,
     emailVerified   BOOLEAN         NOT NULL DEFAULT FALSE,
-    pending_email   VARCHAR(255),                       -- new email waiting for its one-time code
-    google_id       VARCHAR(255)    UNIQUE,             -- Google `sub`; set by Google sign-up or linking
+    google_id       VARCHAR(255)    UNIQUE,             -- Google `sub`; set by Google sign-up or by connecting on the profile
     status          VARCHAR(20)     NOT NULL DEFAULT 'ACTIVE',
     createdAt       BIGINT          NOT NULL,
     updatedAt       BIGINT          NOT NULL,
@@ -34,7 +37,7 @@ CREATE TABLE users (
 );
 ```
 
-`pending_email` and `google_id` are added to existing databases by `ddl-auto=update`; check that the `google_id` unique constraint exists after the first boot. No data migration: existing rows keep `emailVerified = false`, `pending_email` and `google_id` NULL.
+`google_id` was added to existing databases by `ddl-auto=update`, before Flyway; `V1__baseline.sql` includes it. `V1` also carries a `pending_email` column (the address awaiting its code in the old email-change flow), dropped by `V3__google_connect.sql`. Connecting a Google account rewrites `email`, `emailVerified`, `google_id` and `avatarUrl` on the row.
 
 ### email_otps
 
@@ -51,11 +54,23 @@ CREATE TABLE email_otps (
     created_at      BIGINT          NOT NULL,           -- reset on reissue; resend cooldown measured from it
 
     CONSTRAINT uq_email_otps_email_purpose UNIQUE (email, purpose),
-    CONSTRAINT chk_email_otps_purpose CHECK (purpose IN ('REGISTER', 'EMAIL_CHANGE', 'LOGIN', 'PASSWORD_RESET'))
+    CONSTRAINT chk_email_otps_purpose CHECK (purpose IN ('REGISTER', 'LOGIN', 'PASSWORD_RESET'))
 );
 ```
 
 At most one row per `(email, purpose)`. Reissuing a code updates that row in place; a correct code, an expired code, or too many attempts deletes it. The unique and check constraint names above are illustrative; Hibernate generates its own.
+
+**Migrations of the purpose list.** The purpose is stored as text, and when Hibernate created the
+table it added the check constraint `email_otps_purpose_check` listing the enum values of the day;
+`ddl-auto=update` never altered it, so every insert of a renamed value failed. Migration
+`V2__rename_otp_purpose_email_change_to_email_verification.sql` moved the list from `EMAIL_CHANGE` to
+`EMAIL_VERIFICATION`; `V3__google_connect.sql` removed `EMAIL_VERIFICATION` again (the profile no longer
+issues codes; the email comes from the connected Google account) and dropped `users.pending_email`.
+Each deletes the rows on the value it removes first.
+
+Every enum column in this schema has such a `<table>_<column>_check` constraint (`users.status`,
+`courses.visibility`, `enrollments.role`, `enrollments.status`, `exercises.type`, …): adding or
+renaming a value needs a migration like V2 or V3. `ddl-auto: validate` does not catch a missing one.
 
 ### pending_registrations
 
@@ -497,7 +512,7 @@ erDiagram
 | Column                    | Allowed Values                                    |
 |---------------------------|---------------------------------------------------|
 | `users.status`            | `ACTIVE`, `INACTIVE`, `BANNED`                    |
-| `email_otps.purpose`      | `REGISTER`, `EMAIL_CHANGE`, `LOGIN` (reserved), `PASSWORD_RESET` (reserved) |
+| `email_otps.purpose`      | `REGISTER`, `LOGIN` (reserved), `PASSWORD_RESET` (reserved) |
 | `user_global_roles.role`  | `ADMIN`, `USER`, `TEACHER`                          |
 | `courses.visibility`      | `PUBLIC`, `PRIVATE`                               |
 | `enrollments.role`        | `TEACHER`, `LEARNER`                              |
