@@ -18,9 +18,13 @@ import com.example.lib4gz.courses.model.payload.CourseResponse
 import com.example.lib4gz.courses.model.payload.EnrollmentSummary
 import com.example.lib4gz.courses.repo.CourseRepo
 import com.example.lib4gz.courses.repo.EnrollmentRepo
+import com.example.lib4gz.courses.repo.LessonRepo
 import com.example.lib4gz.courses.repo.ModuleRepo
+import com.example.lib4gz.exercise.repo.ExerciseRepo
+import com.example.lib4gz.exercise.repo.QuestionRepo
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionTemplate
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import reactor.core.scheduler.Schedulers
@@ -52,8 +56,12 @@ class CourseServiceImpl(
     private val userRepo: UserRepo,
     private val enrollmentRepo: EnrollmentRepo,
     private val moduleRepo: ModuleRepo,
+    private val lessonRepo: LessonRepo,
+    private val exerciseRepo: ExerciseRepo,
+    private val questionRepo: QuestionRepo,
     private val enrollmentMapper: EnrollmentMapper,
-    private val progressService: ProgressService
+    private val progressService: ProgressService,
+    private val transactionTemplate: TransactionTemplate
 ) : CourseService {
 
     override fun createCourse(userId: String, request: CreateCourseRequest): Mono<CourseResponse> {
@@ -146,15 +154,24 @@ class CourseServiceImpl(
 
     override fun deleteCourse(courseId: String, userId: String): Mono<Void> {
         return Mono.fromCallable {
-            val course = courseRepo.findById(courseId).orElseThrow {
-                ResourceNotFoundException("Course not found with id: $courseId")
-            }
+            transactionTemplate.execute {
+                val course = courseRepo.findById(courseId).orElseThrow {
+                    ResourceNotFoundException("Course not found with id: $courseId")
+                }
 
-            if (course.createdBy.id != userId) {
-                throw UnauthorizedException("Only the course creator can delete the course")
-            }
+                if (course.createdBy.id != userId) {
+                    throw UnauthorizedException("Only the course creator can delete the course")
+                }
 
-            courseRepo.delete(course)
+                // The whole content tree is hidden with the course. Modules go before the course's
+                // own @SQLDelete, so its JPA cascade finds none left to remove one by one; the
+                // cascade still hard-deletes the enrollments.
+                questionRepo.hideByCourseId(courseId)
+                exerciseRepo.hideByCourseId(courseId)
+                lessonRepo.hideByCourseId(courseId)
+                moduleRepo.hideByCourseId(courseId)
+                courseRepo.delete(course)
+            }
         }.subscribeOn(Schedulers.boundedElastic()).then()
     }
 

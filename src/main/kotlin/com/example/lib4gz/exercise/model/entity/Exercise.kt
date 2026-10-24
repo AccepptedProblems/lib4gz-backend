@@ -11,10 +11,7 @@ import java.time.Instant
 import com.example.lib4gz.common.utils.IdGenerator
 
 @Entity
-@Table(
-    name = "exercises",
-    uniqueConstraints = [UniqueConstraint(columnNames = ["lesson_id", "order_index"])]
-)
+@Table(name = "exercises")
 @SQLDelete(sql = "UPDATE exercises SET deleted_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint WHERE id = ?")
 @Where(clause = "deleted_at IS NULL")
 data class Exercise(

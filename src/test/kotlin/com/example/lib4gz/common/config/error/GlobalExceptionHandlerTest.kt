@@ -3,6 +3,7 @@ package com.example.lib4gz.common.config.error
 import com.example.lib4gz.common.exception.BadRequestException
 import com.example.lib4gz.common.exception.BusinessException
 import com.fasterxml.jackson.databind.ObjectMapper
+import org.springframework.dao.DataIntegrityViolationException
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Test
@@ -14,6 +15,7 @@ import org.springframework.security.authentication.InsufficientAuthenticationExc
 import org.springframework.web.reactive.function.client.WebClientRequestException
 import org.springframework.web.server.ResponseStatusException
 import java.net.ConnectException
+import java.sql.SQLException
 import java.net.URI
 
 /**
@@ -99,6 +101,35 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.UNAUTHORIZED, response.statusCode)
         assertEquals(GlobalExceptionHandler.SIGN_IN_REQUIRED, reasonOf(response.body!!))
+    }
+
+    @Test
+    fun `a write that collided with another is a 409 that names neither the constraint nor the SQL`() {
+        val duplicate = "ERROR: duplicate key value violates unique constraint \"ukb4e1cu95o25xf7c0mog5gib51\""
+        val ex = DataIntegrityViolationException(
+            "could not execute statement [$duplicate] [insert into lessons (created_at, deleted_at)]",
+            SQLException(duplicate, "23505")
+        )
+
+        val response = handler.handleDataIntegrityViolationException(ex, request)
+
+        assertEquals(HttpStatus.CONFLICT, response.statusCode)
+        assertEquals(GlobalExceptionHandler.CONFLICT, reasonOf(response.body!!))
+        assertFalse(wire(response.body!!).contains("ukb4e1cu95o25xf7c0mog5gib51"), "the constraint reached the client")
+        assertFalse(wire(response.body!!).contains("insert into"), "the SQL reached the client")
+    }
+
+    @Test
+    fun `a value too long is not a collision and stays a 500`() {
+        val tooLong = "ERROR: value too long for type character varying(500)"
+        val ex = DataIntegrityViolationException(
+            "could not execute statement [$tooLong]", SQLException(tooLong, "22001")
+        )
+
+        val response = handler.handleDataIntegrityViolationException(ex, request)
+
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.statusCode)
+        assertEquals(GlobalExceptionHandler.UNEXPECTED_ERROR, reasonOf(response.body!!))
     }
 
     @Test

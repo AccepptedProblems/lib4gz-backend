@@ -4,6 +4,7 @@ import com.example.lib4gz.common.config.common.PZRequestHeader
 import com.example.lib4gz.common.utils.ExpandTokens
 import com.example.lib4gz.courses.model.payload.CreateLessonRequest
 import com.example.lib4gz.courses.model.payload.LessonResponse
+import com.example.lib4gz.courses.model.payload.ReorderLessonsRequest
 import com.example.lib4gz.courses.model.payload.UpdateLessonRequest
 import com.example.lib4gz.courses.service.LessonService
 import org.springframework.http.HttpStatus
@@ -36,6 +37,19 @@ class LessonController(
     }
 
     /**
+     * Rewrites the order of a module's lessons. The body lists every visible lesson once, in the
+     * new order; anything else is a 400. Returns the lessons as the list endpoint does.
+     */
+    @PutMapping("/modules/{moduleId}/lessons/order")
+    fun reorderLessons(
+        @PathVariable moduleId: String,
+        @RequestBody request: ReorderLessonsRequest,
+        @RequestHeader(PZRequestHeader.USER_ID) userId: String
+    ): Flux<LessonResponse> {
+        return lessonService.reorderLessons(moduleId, userId, request.lessonIds)
+    }
+
+    /**
      * GET /lessons/{id}?expand=summary,exercises,module
      *
      * Without `expand`, behaves identically to the legacy endpoint. With expand:
@@ -44,6 +58,7 @@ class LessonController(
      *                 `mySubmissionStatus`; combine with `questions`/`mySubmission`
      *                 to fully populate the Exercise Attempt screen in one call)
      *   - `module`    embeds the owning module summary
+     *   - `submissionCount` adds, for a teacher, how many student submissions the lesson holds
      */
     @GetMapping("/lessons/{lessonId}")
     fun getLesson(

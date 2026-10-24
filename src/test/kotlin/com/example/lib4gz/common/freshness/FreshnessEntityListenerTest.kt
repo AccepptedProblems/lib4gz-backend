@@ -19,9 +19,29 @@ import com.example.lib4gz.exercise.model.entity.Question
 import com.example.lib4gz.exercise.model.entity.StudentAnswer
 import com.example.lib4gz.exercise.model.entity.Submission
 import com.example.lib4gz.exercise.model.entity.SubmissionStatus
+import org.hibernate.action.spi.BeforeTransactionCompletionProcess
+import org.hibernate.engine.spi.ActionQueue
+import org.hibernate.event.spi.EventSource
+import org.hibernate.event.spi.PostDeleteEvent
+import org.hibernate.jdbc.Work
+import org.hibernate.persister.entity.EntityPersister
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
+import org.mockito.ArgumentCaptor
+import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.anyInt
+import org.mockito.ArgumentMatchers.anyString
+import org.mockito.Mockito.doAnswer
+import org.mockito.Mockito.mock
+import org.mockito.Mockito.never
+import org.mockito.Mockito.verify
+import org.mockito.Mockito.`when`
+import java.sql.Connection
+import java.sql.PreparedStatement
+import java.sql.ResultSet
+import java.sql.SQLException
+import java.sql.Savepoint
 
 /**
  * Pins the declarative entity → (ref, resource types) map — the single place the
@@ -112,6 +132,82 @@ class FreshnessEntityListenerTest {
         val bump = listener.toPendingBump(answer)!!
         assertEquals(FreshnessEntityListener.SubmissionRef("sub_1"), bump.ref)
         assertEquals(setOf(SUBMISSION), bump.types)
+    }
+
+    @Test
+    fun `a course, module or lesson delete bumps every type of its subtree`() {
+        val subtree = setOf(SYLLABUS, LESSON, SUMMARY, EXERCISE, SUBMISSION)
+        assertEquals(subtree, listener.toPendingBump(course, deleted = true)!!.types)
+        assertEquals(subtree, listener.toPendingBump(module, deleted = true)!!.types)
+        assertEquals(subtree, listener.toPendingBump(lesson, deleted = true)!!.types)
+        assertEquals(FreshnessEntityListener.ModuleRef("mod_1"), listener.toPendingBump(lesson, deleted = true)!!.ref)
+    }
+
+    @Test
+    fun `an exercise delete also bumps SUBMISSION`() {
+        val bump = listener.toPendingBump(exercise, deleted = true)!!
+        assertEquals(FreshnessEntityListener.LessonRef("les_1"), bump.ref)
+        assertEquals(setOf(EXERCISE, LESSON, SYLLABUS, SUBMISSION), bump.types)
+    }
+
+    /**
+     * The lesson's exercises are hidden by a bulk update, which fires no event, so the lesson's own
+     * delete event must carry their tokens. Runs the listener end to end against a mocked session.
+     */
+    @Test
+    fun `deleting a lesson bumps the exercise and submission tokens of its course`() {
+        val actionQueue = mock(ActionQueue::class.java)
+        val session = mock(EventSource::class.java)
+        `when`(session.actionQueue).thenReturn(actionQueue)
+
+        val bumped = mutableSetOf<String>()
+        val upsert = mock(PreparedStatement::class.java)
+        doAnswer { bumped += it.arguments[1] as String; null }.`when`(upsert).setString(org.mockito.ArgumentMatchers.eq(3), anyString())
+        val courseOfModule = mock(PreparedStatement::class.java)
+        val row = mock(ResultSet::class.java)
+        `when`(row.next()).thenReturn(true)
+        `when`(row.getString(anyInt())).thenReturn("crs_1")
+        `when`(courseOfModule.executeQuery()).thenReturn(row)
+        val connection = mock(Connection::class.java)
+        `when`(connection.prepareStatement(anyString())).thenAnswer {
+            if ((it.arguments[0] as String).contains("INSERT INTO course_resource_freshness")) upsert else courseOfModule
+        }
+        doAnswer { (it.arguments[0] as Work).execute(connection); null }.`when`(session).doWork(any(Work::class.java))
+
+        listener.onPostDelete(PostDeleteEvent(lesson, "les_1", null, mock(EntityPersister::class.java), session))
+
+        val beforeCommit = ArgumentCaptor.forClass(BeforeTransactionCompletionProcess::class.java)
+        verify(actionQueue).registerProcess(beforeCommit.capture())
+        beforeCommit.value.doBeforeTransactionCompletion(session)
+
+        verify(courseOfModule).setString(1, "mod_1")
+        assertEquals(setOf("SYLLABUS", "LESSON", "SUMMARY", "EXERCISE", "SUBMISSION"), bumped)
+    }
+
+    /**
+     * A failed statement aborts a Postgres transaction, and the commit would then drop the write
+     * without an error. A failed bump must be undone on its own, back to its savepoint.
+     */
+    @Test
+    fun `a failed bump rolls back to its savepoint and leaves the write alone`() {
+        val actionQueue = mock(ActionQueue::class.java)
+        val session = mock(EventSource::class.java)
+        `when`(session.actionQueue).thenReturn(actionQueue)
+        val savepoint = mock(Savepoint::class.java)
+        val upsert = mock(PreparedStatement::class.java)
+        `when`(upsert.executeBatch()).thenThrow(SQLException("check constraint violated", "23514"))
+        val connection = mock(Connection::class.java)
+        `when`(connection.setSavepoint()).thenReturn(savepoint)
+        `when`(connection.prepareStatement(anyString())).thenReturn(upsert)
+        doAnswer { (it.arguments[0] as Work).execute(connection); null }.`when`(session).doWork(any(Work::class.java))
+
+        listener.onPostDelete(PostDeleteEvent(course, "crs_1", null, mock(EntityPersister::class.java), session))
+        val beforeCommit = ArgumentCaptor.forClass(BeforeTransactionCompletionProcess::class.java)
+        verify(actionQueue).registerProcess(beforeCommit.capture())
+        beforeCommit.value.doBeforeTransactionCompletion(session)
+
+        verify(connection).rollback(savepoint)
+        verify(connection, never()).releaseSavepoint(savepoint)
     }
 
     @Test

@@ -11,6 +11,7 @@ import jakarta.servlet.http.HttpServletRequest
 import lombok.extern.slf4j.Slf4j
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.authentication.InsufficientAuthenticationException
@@ -173,6 +174,30 @@ class GlobalExceptionHandler {
     }
 
     /**
+     * A write that collided with another: a duplicate key or a parent that is gone. Usually two changes
+     * crossed, so the client is asked to reload; which constraint, and the SQL, go to the log. Spring
+     * uses the same exception for a value too long or a null where none is allowed, which are not
+     * collisions, so those stay a 500.
+     */
+    @ExceptionHandler(DataIntegrityViolationException::class)
+    fun handleDataIntegrityViolationException(
+        ex: DataIntegrityViolationException, request: HttpServletRequest
+    ): ResponseEntity<ErrorResp> {
+        val sqlState = generateSequence<Throwable>(ex) { it.cause }
+            .filterIsInstance<java.sql.SQLException>()
+            .firstOrNull()?.sqlState
+        if (sqlState !in COLLISION_SQL_STATES) return handleException(ex, request)
+
+        val resp: ErrorResp = buildErrorResp(request, HttpStatus.CONFLICT)
+        logger.error(
+            "Integrity violation on {} {} (requestId {})",
+            request.method, request.servletPath, resp.requestId, ex
+        )
+        resp.addError(GenericError(CONFLICT))
+        return ResponseEntity(resp, HttpStatus.CONFLICT)
+    }
+
+    /**
      * Handle a failed call to another service. Which call, and why, is logged; the client is told only
      * that something failed on our side.
      *
@@ -300,6 +325,13 @@ class GlobalExceptionHandler {
     companion object {
         /** What a client is told when the server itself failed. The detail is in the log, never on the wire. */
         const val UNEXPECTED_ERROR = "Something went wrong on our side. Please try again."
+
+        /** Unique, foreign key and exclusion violations: the SQLStates that mean two writes collided. */
+        private val COLLISION_SQL_STATES = setOf("23505", "23503", "23P01")
+
+        /** A write that clashed with what the database already holds. */
+        const val CONFLICT = "This change clashes with something already saved, perhaps by someone " +
+            "else at the same moment. Refresh the page and try again."
 
         /** A 400 with no reason of its own. */
         const val INVALID_REQUEST = "Invalid request"

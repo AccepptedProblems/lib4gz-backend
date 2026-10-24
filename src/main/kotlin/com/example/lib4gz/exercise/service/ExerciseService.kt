@@ -23,6 +23,7 @@ import com.example.lib4gz.exercise.repo.StudentAnswerRepo
 import com.example.lib4gz.exercise.repo.SubmissionRepo
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionTemplate
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import reactor.core.scheduler.Schedulers
@@ -63,7 +64,8 @@ class ExerciseServiceImpl(
     private val enrollmentService: EnrollmentService,
     private val exerciseMapper: ExerciseMapper,
     private val questionMapper: QuestionMapper,
-    private val submissionMapper: SubmissionMapper
+    private val submissionMapper: SubmissionMapper,
+    private val transactionTemplate: TransactionTemplate
 ) : ExerciseService {
 
     override fun createExercise(lessonId: String, userId: String, request: CreateExerciseRequest): Mono<ExerciseResponse> {
@@ -133,6 +135,11 @@ class ExerciseServiceImpl(
                 buildSubmissionResponse(mySub)
             } else null
 
+            val submissionCount =
+                if (expand.has(EXPAND_SUBMISSION_COUNT) && enrollmentService.isTeacherInCourse(courseId, userId)) {
+                    submissionRepo.countByExercise_Id(exerciseId).toInt()
+                } else null
+
             exerciseMapper.toResponse(
                 exercise = exercise,
                 questionCount = questionCount,
@@ -140,7 +147,7 @@ class ExerciseServiceImpl(
                 mySubmissionId = mySub?.id,
                 questions = questions,
                 mySubmission = mySubmission
-            )
+            ).copy(submissionCount = submissionCount)
         }.subscribeOn(Schedulers.boundedElastic())
     }
 
@@ -169,17 +176,22 @@ class ExerciseServiceImpl(
 
     override fun deleteExercise(exerciseId: String, userId: String): Mono<Void> {
         return Mono.fromCallable {
-            val exercise = exerciseRepo.findById(exerciseId).orElseThrow {
-                ResourceNotFoundException("Exercise not found with id: $exerciseId")
+            transactionTemplate.execute {
+                val exercise = exerciseRepo.findById(exerciseId).orElseThrow {
+                    ResourceNotFoundException("Exercise not found with id: $exerciseId")
+                }
+
+                val courseId = exercise.lesson.module.course.id
+
+                if (!enrollmentService.isTeacherInCourse(courseId, userId)) {
+                    throw UnauthorizedException("Only teachers can delete exercises")
+                }
+
+                // Its questions are hidden with it. Submissions keep no flag of their own: they are
+                // reached only through the exercise.
+                questionRepo.hideByExerciseId(exerciseId)
+                exerciseRepo.delete(exercise)
             }
-
-            val courseId = exercise.lesson.module.course.id
-
-            if (!enrollmentService.isTeacherInCourse(courseId, userId)) {
-                throw UnauthorizedException("Only teachers can delete exercises")
-            }
-
-            exerciseRepo.delete(exercise)
         }.subscribeOn(Schedulers.boundedElastic()).then()
     }
 
@@ -195,7 +207,7 @@ class ExerciseServiceImpl(
                 throw UnauthorizedException("You do not have access to this lesson")
             }
 
-            val exercises = exerciseRepo.findByLesson_IdOrderByOrderIndexAsc(lessonId)
+            val exercises = exerciseRepo.findByLesson_IdOrderByOrderIndexAscCreatedAtAsc(lessonId)
             if (exercises.isEmpty()) return@fromCallable emptyList<ExerciseResponse>()
 
             assembleExerciseResponses(exercises, userId, expand)
@@ -293,5 +305,6 @@ class ExerciseServiceImpl(
     companion object {
         const val EXPAND_QUESTIONS = "questions"
         const val EXPAND_MY_SUBMISSION = "mysubmission"
+        const val EXPAND_SUBMISSION_COUNT = "submissioncount"
     }
 }

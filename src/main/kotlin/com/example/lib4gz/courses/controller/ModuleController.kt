@@ -1,8 +1,10 @@
 package com.example.lib4gz.courses.controller
 
 import com.example.lib4gz.common.config.common.PZRequestHeader
+import com.example.lib4gz.common.utils.ExpandTokens
 import com.example.lib4gz.courses.model.payload.CreateModuleRequest
 import com.example.lib4gz.courses.model.payload.ModuleResponse
+import com.example.lib4gz.courses.model.payload.ReorderModulesRequest
 import com.example.lib4gz.courses.model.payload.UpdateModuleRequest
 import com.example.lib4gz.courses.service.ModuleService
 import org.springframework.http.HttpStatus
@@ -34,12 +36,27 @@ class ModuleController(
         return moduleService.listCourseModules(courseId, userId)
     }
 
+    /**
+     * Rewrites the order of a course's modules. The body lists every visible module once, in the
+     * new order; anything else is a 400. Returns the modules as the list endpoint does.
+     */
+    @PutMapping("/courses/{courseId}/modules/order")
+    fun reorderModules(
+        @PathVariable courseId: String,
+        @RequestBody request: ReorderModulesRequest,
+        @RequestHeader(PZRequestHeader.USER_ID) userId: String
+    ): Flux<ModuleResponse> {
+        return moduleService.reorderModules(courseId, userId, request.moduleIds)
+    }
+
+    /** `?expand=submissionCount` adds, for a teacher, how many student submissions the module holds. */
     @GetMapping("/modules/{moduleId}")
     fun getModule(
         @PathVariable moduleId: String,
+        @RequestParam(required = false) expand: String?,
         @RequestHeader(PZRequestHeader.USER_ID) userId: String
     ): Mono<ModuleResponse> {
-        return moduleService.getModuleById(moduleId, userId)
+        return moduleService.getModuleById(moduleId, userId, ExpandTokens.parse(expand))
     }
 
     @PatchMapping("/modules/{moduleId}")

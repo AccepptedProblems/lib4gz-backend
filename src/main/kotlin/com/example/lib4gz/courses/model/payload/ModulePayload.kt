@@ -11,6 +11,11 @@ data class UpdateModuleRequest(
     val orderIndex: Int? = null
 )
 
+/** Every visible module of the course, in the new order. */
+data class ReorderModulesRequest(
+    val moduleIds: List<String>
+)
+
 // Responses
 data class ModuleResponse(
     val id: String,
@@ -18,6 +23,8 @@ data class ModuleResponse(
     val title: String,
     val orderIndex: Int,
     val lessonCount: Int? = null,
+    // ?expand=submissionCount, teachers only: student submissions, drafts included, a delete would hide
+    val submissionCount: Int? = null,
     val createdAt: Long,
     val updatedAt: Long
 )

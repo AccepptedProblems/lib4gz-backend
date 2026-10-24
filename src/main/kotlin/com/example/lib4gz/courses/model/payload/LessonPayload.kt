@@ -13,6 +13,11 @@ data class UpdateLessonRequest(
     val orderIndex: Int? = null
 )
 
+/** Every visible lesson of the module, in the new order. */
+data class ReorderLessonsRequest(
+    val lessonIds: List<String>
+)
+
 // Responses
 data class LessonResponse(
     val id: String,
@@ -38,7 +43,9 @@ data class LessonResponse(
     // ?expand=summary → the lesson's summary (null if hasSummary == false)
     val summary: SummaryResponse? = null,
     // ?expand=exercises → ordered exercise list (each can carry mySubmissionStatus)
-    val exercises: List<ExerciseResponse>? = null
+    val exercises: List<ExerciseResponse>? = null,
+    // ?expand=submissionCount, teachers only: student submissions, drafts included, a delete would hide
+    val submissionCount: Int? = null
 )
 
 /**

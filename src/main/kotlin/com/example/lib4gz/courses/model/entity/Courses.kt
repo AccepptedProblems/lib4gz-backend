@@ -2,6 +2,7 @@ package com.example.lib4gz.courses.model.entity
 
 import com.example.lib4gz.auth.model.entity.User
 import jakarta.persistence.*
+import org.hibernate.annotations.DynamicUpdate
 import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.annotations.SQLDelete
 import org.hibernate.annotations.Where
@@ -131,10 +132,8 @@ data class Enrollment(
 
 
 @Entity
-@Table(
-    name = "modules",
-    uniqueConstraints = [UniqueConstraint(columnNames = ["course_id", "order_index"])]
-)
+@Table(name = "modules")
+@DynamicUpdate
 @SQLDelete(sql = "UPDATE modules SET deleted_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint WHERE id = ?")
 @Where(clause = "deleted_at IS NULL")
 data class Module(
@@ -153,7 +152,7 @@ data class Module(
     var orderIndex: Int,
 
     @OneToMany(mappedBy = "module", cascade = [CascadeType.ALL], orphanRemoval = true)
-    @OrderBy("orderIndex ASC")
+    @OrderBy("orderIndex ASC, createdAt ASC")
     @Where(clause = "deleted_at IS NULL")
     val lessons: MutableList<Lesson> = mutableListOf(),
 
@@ -174,10 +173,8 @@ data class Module(
 
 
 @Entity
-@Table(
-    name = "lessons",
-    uniqueConstraints = [UniqueConstraint(columnNames = ["module_id", "order_index"])]
-)
+@Table(name = "lessons")
+@DynamicUpdate
 @SQLDelete(sql = "UPDATE lessons SET deleted_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint WHERE id = ?")
 @Where(clause = "deleted_at IS NULL")
 data class Lesson(

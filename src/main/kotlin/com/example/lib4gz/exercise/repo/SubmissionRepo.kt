@@ -29,6 +29,17 @@ interface SubmissionRepo : JpaRepository<Submission, String> {
 
     fun countByExercise_IdAndStatus(exerciseId: String, status: SubmissionStatus): Long
 
+    // What a delete would hide, for the teacher's confirmation. Drafts count: they are student work
+    // too. The join to the exercise carries its @Where, so already hidden exercises are left out.
+
+    fun countByExercise_Id(exerciseId: String): Long
+
+    @Query("SELECT COUNT(s) FROM Submission s WHERE s.exercise.lesson.id = :lessonId")
+    fun countByLessonId(lessonId: String): Long
+
+    @Query("SELECT COUNT(s) FROM Submission s WHERE s.exercise.lesson.module.id = :moduleId")
+    fun countByModuleId(moduleId: String): Long
+
     /**
      * Batched lookups used by aggregate endpoints to avoid N+1 fan-out.
      */

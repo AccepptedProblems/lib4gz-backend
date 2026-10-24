@@ -37,5 +37,7 @@ data class ExerciseResponse(
     // ?expand=questions → ordered question list for this exercise
     val questions: List<QuestionResponse>? = null,
     // ?expand=mySubmission → caller's full submission (with answers)
-    val mySubmission: SubmissionResponse? = null
+    val mySubmission: SubmissionResponse? = null,
+    // ?expand=submissionCount, teachers only: student submissions, drafts included, a delete would hide
+    val submissionCount: Int? = null
 )

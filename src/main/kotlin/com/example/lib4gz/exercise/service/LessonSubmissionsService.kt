@@ -79,7 +79,7 @@ class LessonSubmissionsServiceImpl(
                 throw UnauthorizedException("Only teachers can view lesson submissions")
             }
 
-            val exercises = exerciseRepo.findByLesson_IdOrderByOrderIndexAsc(lessonId)
+            val exercises = exerciseRepo.findByLesson_IdOrderByOrderIndexAscCreatedAtAsc(lessonId)
             if (exercises.isEmpty()) {
                 return@fromCallable LessonSubmissionsResponse(exercises = emptyList())
             }

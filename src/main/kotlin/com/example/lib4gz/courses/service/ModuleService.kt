@@ -1,7 +1,9 @@
 package com.example.lib4gz.courses.service
 
+import com.example.lib4gz.common.exception.BadRequestException
 import com.example.lib4gz.common.exception.ResourceNotFoundException
 import com.example.lib4gz.common.exception.UnauthorizedException
+import com.example.lib4gz.common.utils.ExpandTokens
 import com.example.lib4gz.courses.model.entity.Module
 import com.example.lib4gz.courses.model.mapper.ModuleMapper
 import com.example.lib4gz.courses.model.payload.CreateModuleRequest
@@ -10,8 +12,12 @@ import com.example.lib4gz.courses.model.payload.UpdateModuleRequest
 import com.example.lib4gz.courses.repo.CourseRepo
 import com.example.lib4gz.courses.repo.LessonRepo
 import com.example.lib4gz.courses.repo.ModuleRepo
+import com.example.lib4gz.exercise.repo.ExerciseRepo
+import com.example.lib4gz.exercise.repo.QuestionRepo
+import com.example.lib4gz.exercise.repo.SubmissionRepo
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionTemplate
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import reactor.core.scheduler.Schedulers
@@ -20,13 +26,16 @@ interface ModuleService {
 
     fun createModule(courseId: String, userId: String, request: CreateModuleRequest): Mono<ModuleResponse>
 
-    fun getModuleById(moduleId: String, userId: String): Mono<ModuleResponse>
+    fun getModuleById(moduleId: String, userId: String, expand: ExpandTokens = ExpandTokens.EMPTY): Mono<ModuleResponse>
 
     fun updateModule(moduleId: String, userId: String, request: UpdateModuleRequest): Mono<ModuleResponse>
 
     fun deleteModule(moduleId: String, userId: String): Mono<Void>
 
     fun listCourseModules(courseId: String, userId: String): Flux<ModuleResponse>
+
+    /** Rewrites every position from [moduleIds], which must list each visible module of the course once. */
+    fun reorderModules(courseId: String, userId: String, moduleIds: List<String>): Flux<ModuleResponse>
 }
 
 @Service
@@ -35,8 +44,12 @@ class ModuleServiceImpl(
     private val moduleRepo: ModuleRepo,
     private val courseRepo: CourseRepo,
     private val lessonRepo: LessonRepo,
+    private val exerciseRepo: ExerciseRepo,
+    private val questionRepo: QuestionRepo,
+    private val submissionRepo: SubmissionRepo,
     private val enrollmentService: EnrollmentService,
-    private val moduleMapper: ModuleMapper
+    private val moduleMapper: ModuleMapper,
+    private val transactionTemplate: TransactionTemplate
 ) : ModuleService {
 
     override fun createModule(courseId: String, userId: String, request: CreateModuleRequest): Mono<ModuleResponse> {
@@ -64,7 +77,7 @@ class ModuleServiceImpl(
         }.subscribeOn(Schedulers.boundedElastic())
     }
 
-    override fun getModuleById(moduleId: String, userId: String): Mono<ModuleResponse> {
+    override fun getModuleById(moduleId: String, userId: String, expand: ExpandTokens): Mono<ModuleResponse> {
         return Mono.fromCallable {
             val module = moduleRepo.findById(moduleId).orElseThrow {
                 ResourceNotFoundException("Module not found with id: $moduleId")
@@ -76,7 +89,11 @@ class ModuleServiceImpl(
             }
 
             val lessonCount = lessonRepo.countByModule_Id(moduleId).toInt()
-            moduleMapper.toResponse(module, lessonCount)
+            val submissionCount =
+                if (expand.has(EXPAND_SUBMISSION_COUNT) && enrollmentService.isTeacherInCourse(module.course.id, userId)) {
+                    submissionRepo.countByModuleId(moduleId).toInt()
+                } else null
+            moduleMapper.toResponse(module, lessonCount).copy(submissionCount = submissionCount)
         }.subscribeOn(Schedulers.boundedElastic())
     }
 
@@ -102,17 +119,23 @@ class ModuleServiceImpl(
 
     override fun deleteModule(moduleId: String, userId: String): Mono<Void> {
         return Mono.fromCallable {
-            val module = moduleRepo.findById(moduleId).orElseThrow {
-                ResourceNotFoundException("Module not found with id: $moduleId")
-            }
+            transactionTemplate.execute {
+                val module = moduleRepo.findById(moduleId).orElseThrow {
+                    ResourceNotFoundException("Module not found with id: $moduleId")
+                }
 
-            // Only teachers can delete modules
-            if (!enrollmentService.isTeacherInCourse(module.course.id, userId)) {
-                throw UnauthorizedException("Only teachers can delete modules")
-            }
+                // Only teachers can delete modules
+                if (!enrollmentService.isTeacherInCourse(module.course.id, userId)) {
+                    throw UnauthorizedException("Only teachers can delete modules")
+                }
 
-            // Soft delete is handled by @SQLDelete annotation
-            moduleRepo.delete(module)
+                // The whole subtree is hidden with the module. Lessons go before the module's own
+                // @SQLDelete, so its JPA cascade finds none left to remove one by one.
+                questionRepo.hideByModuleId(moduleId)
+                exerciseRepo.hideByModuleId(moduleId)
+                lessonRepo.hideByModuleId(moduleId)
+                moduleRepo.delete(module)
+            }
         }.subscribeOn(Schedulers.boundedElastic()).then()
     }
 
@@ -128,12 +151,42 @@ class ModuleServiceImpl(
                 throw UnauthorizedException("You do not have access to this course")
             }
 
-            val modules = moduleRepo.findByCourse_IdOrderByOrderIndexAsc(courseId)
+            val modules = moduleRepo.findByCourse_IdOrderByOrderIndexAscCreatedAtAsc(courseId)
             modules.map { module ->
                 val lessonCount = lessonRepo.countByModule_Id(module.id).toInt()
                 moduleMapper.toResponse(module, lessonCount)
             }
         }.flatMapMany { Flux.fromIterable(it) }
          .subscribeOn(Schedulers.boundedElastic())
+    }
+
+    override fun reorderModules(courseId: String, userId: String, moduleIds: List<String>): Flux<ModuleResponse> {
+        return Mono.fromCallable {
+            transactionTemplate.execute {
+                if (!courseRepo.existsById(courseId)) {
+                    throw ResourceNotFoundException("Course not found with id: $courseId")
+                }
+
+                if (!enrollmentService.isTeacherInCourse(courseId, userId)) {
+                    throw UnauthorizedException("Only teachers can reorder modules")
+                }
+
+                val modules = moduleRepo.findByCourse_IdOrderByOrderIndexAscCreatedAtAsc(courseId)
+                if (moduleIds.size != modules.size || moduleIds.toSet() != modules.map { it.id }.toSet()) {
+                    throw BadRequestException(
+                        "The modules of this course changed since the page was loaded. Refresh the page and try again."
+                    )
+                }
+
+                // Entity writes, not a bulk update, so the freshness listener sees each change.
+                val byId = modules.associateBy { it.id }
+                moduleIds.forEachIndexed { index, id -> byId.getValue(id).orderIndex = index }
+            }
+        }.subscribeOn(Schedulers.boundedElastic())
+            .thenMany(listCourseModules(courseId, userId))
+    }
+
+    companion object {
+        const val EXPAND_SUBMISSION_COUNT = "submissioncount"
     }
 }

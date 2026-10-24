@@ -64,10 +64,10 @@ class SyllabusServiceImpl(
             val myEnrollment = enrollmentRepo.findByCourse_IdAndUser_Id(courseId, userId)
             authorizeReadAccess(course, userId, myEnrollment != null && myEnrollment.status == EnrollmentStatus.ACTIVE)
 
-            val modules = moduleRepo.findByCourse_IdOrderByOrderIndexAsc(courseId)
+            val modules = moduleRepo.findByCourse_IdOrderByOrderIndexAscCreatedAtAsc(courseId)
             val lessonsByModuleId: Map<String, List<Lesson>> =
                 lessonRepo.findByCourseId(courseId)
-                    .sortedBy { it.orderIndex }
+                    .sortedWith(compareBy({ it.orderIndex }, { it.createdAt }))
                     .groupBy { it.module.id }
 
             val lessonIdsWithSummary: Set<String> =

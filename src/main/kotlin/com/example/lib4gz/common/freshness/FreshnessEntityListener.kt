@@ -55,7 +55,9 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * Never-throw guarantee: a freshness bump is a cache hint. Any failure here is logged
  * at WARN and swallowed — it must never fail the domain transaction. Worst case is one
- * missed invalidation until the next real mutation.
+ * missed invalidation until the next real mutation. The bump runs under a savepoint: a
+ * failed statement aborts a Postgres transaction, and the commit would then roll the
+ * domain write back without an error.
  */
 @Component
 class FreshnessEntityListener :
@@ -76,15 +78,15 @@ class FreshnessEntityListener :
 
     override fun requiresPostCommitHandling(persister: EntityPersister): Boolean = false
 
-    override fun onPostInsert(event: PostInsertEvent) = collect(event.session, event.entity)
+    override fun onPostInsert(event: PostInsertEvent) = collect(event.session, event.entity, deleted = false)
 
-    override fun onPostUpdate(event: PostUpdateEvent) = collect(event.session, event.entity)
+    override fun onPostUpdate(event: PostUpdateEvent) = collect(event.session, event.entity, deleted = false)
 
-    override fun onPostDelete(event: PostDeleteEvent) = collect(event.session, event.entity)
+    override fun onPostDelete(event: PostDeleteEvent) = collect(event.session, event.entity, deleted = true)
 
-    private fun collect(session: EventSource, entity: Any?) {
+    private fun collect(session: EventSource, entity: Any?, deleted: Boolean) {
         try {
-            val bump = toPendingBump(entity) ?: return
+            val bump = toPendingBump(entity, deleted) ?: return
             pendingBySession.computeIfAbsent(session) {
                 session.actionQueue.registerProcess(
                     BeforeTransactionCompletionProcess { s -> flushBumps(s) }
@@ -110,15 +112,22 @@ class FreshnessEntityListener :
      * must not thrash the teacher's submissions cache. Submission status is checked
      * directly on the entity; StudentAnswer defers the check to resolution SQL because
      * reading its submission proxy at event time could trigger a load mid-flush.
+     *
+     * Delete rule: a course, module, lesson or exercise delete hides its children with bulk
+     * updates, which fire no events. So the parent's own delete declares every type its
+     * descendants appear in.
      */
-    internal fun toPendingBump(entity: Any?): PendingBump? = when (entity) {
-        is Course -> PendingBump(CourseRef(entity.id), SYLLABUS_ONLY)
-        is Module -> idOf(entity.course)?.let { PendingBump(CourseRef(it), SYLLABUS_ONLY) }
+    internal fun toPendingBump(entity: Any?, deleted: Boolean = false): PendingBump? = when (entity) {
+        is Course -> PendingBump(CourseRef(entity.id), if (deleted) SUBTREE else SYLLABUS_ONLY)
+        is Module -> idOf(entity.course)?.let { PendingBump(CourseRef(it), if (deleted) SUBTREE else SYLLABUS_ONLY) }
         // Course ref captured now: enrollments are hard-deleted, so the row is gone
         // by resolution time.
         is Enrollment -> idOf(entity.course)?.let { PendingBump(CourseRef(it), SYLLABUS_ONLY) }
         is Lesson -> idOf(entity.module)?.let {
-            PendingBump(ModuleRef(it), setOf(FreshnessResourceType.LESSON, FreshnessResourceType.SYLLABUS))
+            PendingBump(
+                ModuleRef(it),
+                if (deleted) SUBTREE else setOf(FreshnessResourceType.LESSON, FreshnessResourceType.SYLLABUS)
+            )
         }
         is Summary -> idOf(entity.lesson)?.let {
             PendingBump(
@@ -127,10 +136,8 @@ class FreshnessEntityListener :
             )
         }
         is Exercise -> idOf(entity.lesson)?.let {
-            PendingBump(
-                LessonRef(it),
-                setOf(FreshnessResourceType.EXERCISE, FreshnessResourceType.LESSON, FreshnessResourceType.SYLLABUS)
-            )
+            val types = setOf(FreshnessResourceType.EXERCISE, FreshnessResourceType.LESSON, FreshnessResourceType.SYLLABUS)
+            PendingBump(LessonRef(it), if (deleted) types + FreshnessResourceType.SUBMISSION else types)
         }
         is Question -> PendingBump(
             ExerciseRef(entity.exerciseId),
@@ -161,27 +168,38 @@ class FreshnessEntityListener :
         if (pending.isEmpty()) return
         try {
             (session as org.hibernate.Session).doWork { connection ->
-                val bumps = HashSet<Pair<String, FreshnessResourceType>>()
-                for (p in pending) {
-                    val courseId = resolveCourseId(connection, p.ref) ?: continue
-                    p.types.forEach { bumps += courseId to it }
-                }
-                if (bumps.isEmpty()) return@doWork
-
-                val now = Instant.now().toEpochMilli()
-                connection.prepareStatement(UPSERT_SQL).use { ps ->
-                    for ((courseId, type) in bumps) {
-                        ps.setString(1, IdGenerator.generate("frs"))
-                        ps.setString(2, courseId)
-                        ps.setString(3, type.name)
-                        ps.setLong(4, now)
-                        ps.addBatch()
-                    }
-                    ps.executeBatch()
+                val savepoint = connection.setSavepoint()
+                try {
+                    writeBumps(connection, pending)
+                    connection.releaseSavepoint(savepoint)
+                } catch (e: Exception) {
+                    connection.rollback(savepoint)
+                    throw e
                 }
             }
         } catch (e: Exception) {
             log.warn("Freshness bump flush failed; client caches may serve one stale read", e)
+        }
+    }
+
+    private fun writeBumps(connection: Connection, pending: Set<PendingBump>) {
+        val bumps = HashSet<Pair<String, FreshnessResourceType>>()
+        for (p in pending) {
+            val courseId = resolveCourseId(connection, p.ref) ?: continue
+            p.types.forEach { bumps += courseId to it }
+        }
+        if (bumps.isEmpty()) return
+
+        val now = Instant.now().toEpochMilli()
+        connection.prepareStatement(UPSERT_SQL).use { ps ->
+            for ((courseId, type) in bumps) {
+                ps.setString(1, IdGenerator.generate("frs"))
+                ps.setString(2, courseId)
+                ps.setString(3, type.name)
+                ps.setLong(4, now)
+                ps.addBatch()
+            }
+            ps.executeBatch()
         }
     }
 
@@ -218,6 +236,15 @@ class FreshnessEntityListener :
     companion object {
         private val SYLLABUS_ONLY = setOf(FreshnessResourceType.SYLLABUS)
         private val SUBMISSION_ONLY = setOf(FreshnessResourceType.SUBMISSION)
+
+        /** Every type that embeds content below a lesson, module or course. */
+        private val SUBTREE = setOf(
+            FreshnessResourceType.SYLLABUS,
+            FreshnessResourceType.LESSON,
+            FreshnessResourceType.SUMMARY,
+            FreshnessResourceType.EXERCISE,
+            FreshnessResourceType.SUBMISSION
+        )
 
         private const val UPSERT_SQL = """
             INSERT INTO course_resource_freshness (id, course_id, resource_type, last_update)
