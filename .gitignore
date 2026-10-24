@@ -39,8 +39,8 @@ out/
 ### Kotlin ###
 .kotlin
 
-### Deploy scripts (contains project config) ###
-deploy/
+### Claude Code: per-machine settings only; skills and CLAUDE.md files are tracked ###
+.claude/settings.local.json
 
 ### Local secrets ###
 .env

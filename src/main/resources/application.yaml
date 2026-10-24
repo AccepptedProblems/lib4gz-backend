@@ -36,6 +36,13 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
     open-in-view: false
 
+# The API reference is generated from the controllers; nothing is written by hand. Off by default so
+# production never publishes it: Cloud Run does not set API_DOCS_ENABLED, a local .env does.
+springdoc:
+  api-docs:
+    enabled: ${API_DOCS_ENABLED:false}
+  swagger-ui:
+    enabled: ${API_DOCS_ENABLED:false}
 
 application:
   security:

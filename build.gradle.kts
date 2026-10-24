@@ -46,6 +46,10 @@ dependencies {
 	implementation("org.flywaydb:flyway-core")
 	runtimeOnly("org.flywaydb:flyway-database-postgresql")
 
+	// The API reference, generated from the controllers: /api/v3/api-docs and /api/swagger-ui.html.
+	// Off unless API_DOCS_ENABLED=true (see application.yaml).
+	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.17")
+
 	// TypeID: UUIDv7 generation for type-prefixed IDs
 	implementation("com.github.f4b6a3:uuid-creator:6.0.0")
 
@@ -67,4 +71,9 @@ kotlin {
 
 tasks.withType<Test> {
 	useJUnitPlatform()
+}
+
+// CLAUDE.md files sit beside what they describe (db/migration); they are not shipped in the jar.
+tasks.processResources {
+	exclude("**/*.md")
 }
