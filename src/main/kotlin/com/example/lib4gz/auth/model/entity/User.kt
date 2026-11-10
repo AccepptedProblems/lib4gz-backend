@@ -1,7 +1,9 @@
 package com.example.lib4gz.auth.model.entity
 
 import jakarta.persistence.*
+import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.annotations.SQLDelete
+import org.hibernate.type.SqlTypes
 import java.time.Instant
 import com.example.lib4gz.common.utils.IdGenerator
 
@@ -44,6 +46,11 @@ data class User(
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     var status: UserStatus = UserStatus.ACTIVE,
+
+    /** Lightning Kart look, `{"characterId", "kartId"}`; owned by `race/`, null until chosen. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "race_appearance", columnDefinition = "jsonb")
+    var raceAppearance: Map<String, Any>? = null,
 
     @Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: Long = Instant.now().toEpochMilli(),

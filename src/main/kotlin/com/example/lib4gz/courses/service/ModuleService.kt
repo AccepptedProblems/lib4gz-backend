@@ -14,6 +14,7 @@ import com.example.lib4gz.courses.repo.LessonRepo
 import com.example.lib4gz.courses.repo.ModuleRepo
 import com.example.lib4gz.exercise.repo.ExerciseRepo
 import com.example.lib4gz.exercise.repo.QuestionRepo
+import com.example.lib4gz.race.repo.RaceQuestionRepo
 import com.example.lib4gz.exercise.repo.SubmissionRepo
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -46,6 +47,7 @@ class ModuleServiceImpl(
     private val lessonRepo: LessonRepo,
     private val exerciseRepo: ExerciseRepo,
     private val questionRepo: QuestionRepo,
+    private val raceQuestionRepo: RaceQuestionRepo,
     private val submissionRepo: SubmissionRepo,
     private val enrollmentService: EnrollmentService,
     private val moduleMapper: ModuleMapper,
@@ -131,6 +133,7 @@ class ModuleServiceImpl(
 
                 // The whole subtree is hidden with the module. Lessons go before the module's own
                 // @SQLDelete, so its JPA cascade finds none left to remove one by one.
+                raceQuestionRepo.hideByModuleId(moduleId)
                 questionRepo.hideByModuleId(moduleId)
                 exerciseRepo.hideByModuleId(moduleId)
                 lessonRepo.hideByModuleId(moduleId)

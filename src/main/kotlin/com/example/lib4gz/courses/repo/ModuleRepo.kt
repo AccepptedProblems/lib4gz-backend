@@ -18,6 +18,8 @@ interface ModuleRepo : JpaRepository<Module, String> {
 
     fun countByCourse_Id(courseId: String): Long
 
+    fun existsByIdAndCourse_Id(id: String, courseId: String): Boolean
+
     /**
      * Hides a course's modules for the course delete. `NOW()` is the transaction's start, the same
      * value the course's own `@SQLDelete` writes, so one timestamp finds the whole delete.

@@ -12,7 +12,8 @@ fun User.toResponse() = UserResponse(
     avatarUrl = avatarUrl,
     role = primaryRole(),
     emailVerified = emailVerified,
-    googleConnected = googleId != null
+    googleConnected = googleId != null,
+    raceAppearance = raceAppearance
 )
 
 /** The single role the frontend shows: ADMIN > TEACHER > USER. */

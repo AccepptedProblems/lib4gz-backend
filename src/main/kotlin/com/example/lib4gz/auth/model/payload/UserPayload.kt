@@ -12,11 +12,14 @@ data class UserResponse(
     val role: UserRole,
     val emailVerified: Boolean,
     /** A Google account signs this user in; the email is that account's address. */
-    val googleConnected: Boolean
+    val googleConnected: Boolean,
+    /** Lightning Kart look, `{"characterId", "kartId"}`, or null when never chosen. */
+    val raceAppearance: Map<String, Any>?
 )
 
 data class UpdateMeRequest(
-    val name: String? = null
+    val name: String? = null,
+    val raceAppearance: Map<String, Any>? = null
 )
 
 /**

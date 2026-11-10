@@ -22,6 +22,7 @@ import com.example.lib4gz.courses.repo.LessonRepo
 import com.example.lib4gz.courses.repo.ModuleRepo
 import com.example.lib4gz.exercise.repo.ExerciseRepo
 import com.example.lib4gz.exercise.repo.QuestionRepo
+import com.example.lib4gz.race.repo.RaceQuestionRepo
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionTemplate
@@ -59,6 +60,7 @@ class CourseServiceImpl(
     private val lessonRepo: LessonRepo,
     private val exerciseRepo: ExerciseRepo,
     private val questionRepo: QuestionRepo,
+    private val raceQuestionRepo: RaceQuestionRepo,
     private val enrollmentMapper: EnrollmentMapper,
     private val progressService: ProgressService,
     private val transactionTemplate: TransactionTemplate
@@ -166,6 +168,7 @@ class CourseServiceImpl(
                 // The whole content tree is hidden with the course. Modules go before the course's
                 // own @SQLDelete, so its JPA cascade finds none left to remove one by one; the
                 // cascade still hard-deletes the enrollments.
+                raceQuestionRepo.hideByCourseId(courseId)
                 questionRepo.hideByCourseId(courseId)
                 exerciseRepo.hideByCourseId(courseId)
                 lessonRepo.hideByCourseId(courseId)

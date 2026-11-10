@@ -30,8 +30,9 @@ Generated from the controllers; there is no hand-written API document. With
 - A new migration needs the check in `src/main/resources/db/migration/CLAUDE.md`.
 - `scripts/check-docs.sh` fails when a `CLAUDE.md` names a file that no longer exists, and
   lists folders whose code changed without their doc.
-- Tests cover `auth`, `common` and freshness. `courses` and `exercise` have almost none, so
-  a change there is not verified by `./gradlew test`; say so instead of reporting it checked.
+- Tests cover `auth`, `common`, `race` and freshness. `courses` and `exercise` have almost
+  none, so a change there is not verified by `./gradlew test`; say so instead of reporting it
+  checked.
 
 ## Map
 
@@ -44,6 +45,7 @@ own `CLAUDE.md`, which loads when you open a file there. Read it before changing
 | `auth/` | Accounts, sign-in, sign-up, own profile |
 | `courses/` | Courses, enrollment, modules, lessons, summaries, syllabus, progress |
 | `exercise/` | Exercises, questions, submissions, teacher review read |
+| `race/` | Lightning Kart: race questions, results, leaderboard, the racer's look |
 | `common/` | Ids, expand tokens, exceptions and the error body |
 | `common/notification/` | Telling people things; mail providers |
 | `common/freshness/` | Cache tokens bumped from entity writes |

@@ -72,6 +72,37 @@ class UserServiceImplTest {
     }
 
     @Test
+    fun `updateMe saves a character and a kart`() {
+        `when`(userRepo.findById("usr_alice")).thenReturn(Optional.of(alice))
+        `when`(userRepo.save(anyValue<User>())).then(returnsFirstArg<User>())
+        val look = mapOf("characterId" to "chr_bolt", "kartId" to "krt_classic")
+
+        val me = service.updateMe("usr_alice", UpdateMeRequest(raceAppearance = look)).block()!!
+
+        assertEquals(look, me.raceAppearance)
+        assertEquals(look, alice.raceAppearance)
+    }
+
+    @Test
+    fun `updateMe refuses a look that is not a character and a kart`() {
+        `when`(userRepo.findById("usr_alice")).thenReturn(Optional.of(alice))
+        val bad = listOf(
+            mapOf("characterId" to "chr_bolt"),
+            mapOf("characterId" to "chr_bolt", "kartId" to " "),
+            mapOf("characterId" to "chr_bolt", "kartId" to 3),
+            mapOf("characterId" to "chr_bolt", "kartId" to "krt_classic", "gold" to 999)
+        )
+
+        for (look in bad) {
+            val ex = assertThrows(ValidationException::class.java) {
+                service.updateMe("usr_alice", UpdateMeRequest(raceAppearance = look)).block()
+            }
+            assertEquals("Choose a character and a kart.", ex.message)
+        }
+        verify(userRepo, never()).save(anyValue<User>())
+    }
+
+    @Test
     fun `getMyCourses combines enrolled and created lists`() {
         val enrolled = course("crs_enrolled")
         val created = course("crs_created")

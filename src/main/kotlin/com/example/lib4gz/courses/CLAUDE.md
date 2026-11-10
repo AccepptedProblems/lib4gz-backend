@@ -35,9 +35,9 @@ Entry points: `service/EnrollmentService.kt` (who may do what), `service/Syllabu
   purpose: they are called from inside other services' `Mono.fromCallable`.
 - A delete hides its whole subtree in the service, in one `transactionTemplate` block: the
   `hide*` bulk updates of every level below run before the parent's own delete, down to
-  questions, whether the delete starts at a course, a module or a lesson. A new child table
-  needs the `deleted_at` column, the `@Where` filter and a `hide*` line in each ancestor's
-  delete.
+  questions and the race questions of `race/`, whether the delete starts at a course, a
+  module or a lesson. A new child table needs the `deleted_at` column, the `@Where` filter
+  and a `hide*` line in each ancestor's delete.
 - No uniqueness rule on `order_index`. Lists order by position, then `createdAt`. A reorder
   takes every visible id of the parent, rejects any other list with a 400, and rewrites the
   positions as entity writes so freshness sees them.

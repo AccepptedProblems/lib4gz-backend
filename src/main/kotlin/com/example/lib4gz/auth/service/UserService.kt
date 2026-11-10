@@ -66,7 +66,7 @@ class UserServiceImpl(
         }.subscribeOn(Schedulers.boundedElastic())
     }
 
-    /** Saves the display name. The only field a person edits directly. */
+    /** Saves the display name and the Lightning Kart look; each only when sent. */
     override fun updateMe(userId: String, request: UpdateMeRequest): Mono<UserResponse> {
         return Mono.fromCallable {
             transactionTemplate.execute {
@@ -75,6 +75,13 @@ class UserServiceImpl(
                     val name = request.name.trim()
                     if (name.isEmpty()) throw ValidationException("Name must not be blank")
                     user.name = name
+                }
+                if (request.raceAppearance != null) {
+                    val look = request.raceAppearance
+                    val wellFormed = look.keys == setOf("characterId", "kartId") &&
+                        look.values.all { it is String && it.isNotBlank() }
+                    if (!wellFormed) throw ValidationException("Choose a character and a kart.")
+                    user.raceAppearance = look
                 }
                 userRepo.save(user).toResponse()
             }!!

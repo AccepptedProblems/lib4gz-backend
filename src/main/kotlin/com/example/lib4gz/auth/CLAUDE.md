@@ -14,7 +14,8 @@ Entry points: `service/RegistrationService.kt`, `service/GoogleAuthService.kt`,
 - A Google account is matched by its Google id (`sub`), never by email. Sign-in with a
   Google account whose email already belongs to a user is refused, never joined.
 - `GoogleAuthService.connect` is the only place a Google id is linked to a user, and the
-  only way a user's email changes. The profile edits the display name and nothing else.
+  only way a user's email changes. The profile edits the display name and the Lightning Kart
+  look (`race_appearance`, owned by `race/`) and nothing else.
 - A password is optional. An account created through Google has none and cannot sign in at
   `/v1/auth/login`.
 - `OtpService.verify` commits in its own transaction so a wrong guess still counts against
