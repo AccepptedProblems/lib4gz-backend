@@ -45,7 +45,7 @@ own `CLAUDE.md`, which loads when you open a file there. Read it before changing
 | `auth/` | Accounts, sign-in, sign-up, own profile |
 | `courses/` | Courses, enrollment, modules, lessons, summaries, syllabus, progress |
 | `exercise/` | Exercises, questions, submissions, teacher review read |
-| `race/` | Lightning Kart: race questions, results, leaderboard, the racer's look |
+| `race/` | Lightning Kart: race questions, dealt and checked races, results, leaderboard, the racer's look |
 | `common/` | Ids, expand tokens, exceptions and the error body |
 | `common/notification/` | Telling people things; mail providers |
 | `common/freshness/` | Cache tokens bumped from entity writes |

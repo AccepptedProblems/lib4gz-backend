@@ -7,7 +7,7 @@ import org.springframework.scheduling.annotation.EnableScheduling
 
 @SpringBootApplication
 @EnableScheduling
-@ConfigurationPropertiesScan   // MailProperties, BrevoProperties
+@ConfigurationPropertiesScan   // binds every @ConfigurationProperties class, e.g. MailProperties, RaceProperties
 class Lib4gzApplication
 
 fun main(args: Array<String>) {

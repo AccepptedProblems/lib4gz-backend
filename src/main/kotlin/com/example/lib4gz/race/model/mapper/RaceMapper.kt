@@ -11,19 +11,23 @@ import org.springframework.stereotype.Component
 @Component
 class RaceMapper {
 
-    fun toResponse(question: RaceQuestion) = RaceQuestionResponse(
+    /**
+     * [teacher] is true only for a teacher of the course. Anyone else gets no options and no key: the
+     * options in typed order would show where the teacher put the right one.
+     */
+    fun toResponse(question: RaceQuestion, teacher: Boolean) = RaceQuestionResponse(
         id = question.id,
         courseId = question.courseId,
         moduleId = question.moduleId,
         content = question.content,
-        options = question.options.map { it["text"]?.toString() ?: "" },
-        correctIndex = question.correctIndex,
+        options = if (teacher) question.optionTexts() else emptyList(),
+        correctIndex = if (teacher) question.correctIndex else null,
         orderIndex = question.orderIndex,
         createdAt = question.createdAt,
         updatedAt = question.updatedAt
     )
 
-    fun toResponse(result: RaceResult) = RaceResultResponse(
+    fun toResponse(result: RaceResult, answerKey: List<Int?>) = RaceResultResponse(
         id = result.id,
         userId = result.userId,
         courseId = result.courseId,
@@ -32,7 +36,8 @@ class RaceMapper {
         correctCount = result.correctCount,
         wrongCount = result.wrongCount,
         seed = result.seed,
-        createdAt = result.createdAt
+        createdAt = result.createdAt,
+        answerKey = answerKey
     )
 
     /** [user] is null only for a result whose user row is gone; the row then shows the id. */

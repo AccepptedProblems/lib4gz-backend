@@ -13,6 +13,8 @@ interface RaceQuestionRepo : JpaRepository<RaceQuestion, String> {
 
     fun findByCourseId(courseId: String): List<RaceQuestion>
 
+    fun findByCourseIdAndModuleId(courseId: String, moduleId: String): List<RaceQuestion>
+
     // The hide* updates serve a parent's delete. `NOW()` is the transaction's start, the same value
     // the parent's own `@SQLDelete` writes, so one timestamp finds the whole delete.
 

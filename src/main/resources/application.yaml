@@ -70,3 +70,12 @@ application:
     ttl-ms: 600000              # 10 min
     max-attempts: 5
     resend-cooldown-ms: 60000
+  # Lightning Kart. A finish faster than these allow is refused, so they must match the game's own
+  # constants in the frontend (lightning-kart engine/constants.ts and track/lap.ts).
+  race:
+    laps: 3
+    lap-length: 2641            # units; the circuit measures 2,641.24, and at or under it is the safe side
+    top-speed: 44               # units per second, no boost
+    boost-seconds: 5
+    double-multiplier: 1.7
+    max-questions: 48           # must cover the game's rows per lap times laps (24 today)

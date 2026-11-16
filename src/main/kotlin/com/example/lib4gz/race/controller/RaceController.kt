@@ -1,11 +1,15 @@
 package com.example.lib4gz.race.controller
 
 import com.example.lib4gz.common.config.common.PZRequestHeader
-import com.example.lib4gz.race.model.payload.CreateRaceResultRequest
+import com.example.lib4gz.race.model.payload.AnswerRequest
+import com.example.lib4gz.race.model.payload.AnswerResponse
+import com.example.lib4gz.race.model.payload.FinishRaceRequest
 import com.example.lib4gz.race.model.payload.LeaderboardResponse
 import com.example.lib4gz.race.model.payload.RaceQuestionResponse
 import com.example.lib4gz.race.model.payload.RaceResultResponse
 import com.example.lib4gz.race.model.payload.ReplaceRaceQuestionsRequest
+import com.example.lib4gz.race.model.payload.StartRaceRequest
+import com.example.lib4gz.race.model.payload.StartRaceResponse
 import com.example.lib4gz.race.service.RaceService
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.GetMapping
@@ -44,14 +48,35 @@ class RaceController(
         return raceService.replaceQuestions(courseId, userId, request)
     }
 
-    @PostMapping("/courses/{courseId}/race-results")
+    @PostMapping("/courses/{courseId}/races")
     @ResponseStatus(HttpStatus.CREATED)
-    fun saveResult(
+    fun startRace(
         @PathVariable courseId: String,
-        @RequestBody request: CreateRaceResultRequest,
+        @RequestBody request: StartRaceRequest,
+        @RequestHeader(PZRequestHeader.USER_ID) userId: String
+    ): Mono<StartRaceResponse> {
+        return raceService.startRace(courseId, userId, request)
+    }
+
+    @PostMapping("/courses/{courseId}/races/{raceId}/answers")
+    fun answer(
+        @PathVariable courseId: String,
+        @PathVariable raceId: String,
+        @RequestBody request: AnswerRequest,
+        @RequestHeader(PZRequestHeader.USER_ID) userId: String
+    ): Mono<AnswerResponse> {
+        return raceService.answer(courseId, raceId, userId, request)
+    }
+
+    @PostMapping("/courses/{courseId}/races/{raceId}/finish")
+    @ResponseStatus(HttpStatus.CREATED)
+    fun finishRace(
+        @PathVariable courseId: String,
+        @PathVariable raceId: String,
+        @RequestBody request: FinishRaceRequest,
         @RequestHeader(PZRequestHeader.USER_ID) userId: String
     ): Mono<RaceResultResponse> {
-        return raceService.saveResult(courseId, userId, request)
+        return raceService.finishRace(courseId, raceId, userId, request)
     }
 
     @GetMapping("/courses/{courseId}/race-leaderboard")

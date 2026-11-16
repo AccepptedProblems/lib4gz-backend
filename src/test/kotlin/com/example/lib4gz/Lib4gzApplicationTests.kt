@@ -3,6 +3,7 @@ package com.example.lib4gz
 import com.example.lib4gz.auth.job.RegistrationCleanupJob
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.context.annotation.Import
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 
 /**
@@ -21,8 +22,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean
  * ```
  *
  * That applies every migration and then lets Hibernate validate the entities against the result,
- * which is the check to run before shipping a new migration.
+ * which is the check to run before shipping a new migration. `MigrationCheckGuard` refuses to migrate
+ * a database that is not on localhost.
  */
+@Import(MigrationCheckGuard::class)
 @SpringBootTest(
     properties = [
         "spring.flyway.enabled=\${MIGRATION_CHECK:false}",

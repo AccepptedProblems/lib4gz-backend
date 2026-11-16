@@ -15,6 +15,9 @@ have their own `CLAUDE.md`.
   | `ValidationException`, `BusinessException`, `BadRequestException` | 400 |
   | `ResponseStatusException` | its own (used for 409 conflicts, 401 bad credentials, 503 mail down) |
   | `DataIntegrityViolationException` from a duplicate key, a missing parent or an exclusion | 409 with one fixed sentence |
+  | A request body that cannot be read (empty, missing a required field, wrong type, out of range) | 400 with one fixed sentence |
+  | No route at the path | 404 with one fixed sentence |
+  | A method the path does not take | 405 with one fixed sentence |
   | anything else | 500 with one fixed sentence |
 
 - The message of those exceptions is sent to the browser and shown to the person. Word it

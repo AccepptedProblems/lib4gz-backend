@@ -1,5 +1,7 @@
 package com.example.lib4gz.race.model.payload
 
+import com.fasterxml.jackson.annotation.JsonProperty
+
 // PUT /courses/{courseId}/race-questions: the whole bank. An item with an id updates that
 // question; without one it is created; a question whose id is absent is hidden.
 data class RaceQuestionItem(
@@ -19,20 +21,57 @@ data class RaceQuestionResponse(
     val courseId: String,
     val moduleId: String,
     val content: String,
+    /** Empty unless the caller teaches the course. */
     val options: List<String>,
-    val correctIndex: Int,
+    /** The right option. Null unless the caller teaches the course. */
+    val correctIndex: Int?,
     val orderIndex: Int,
     val createdAt: Long,
     val updatedAt: Long
 )
 
-data class CreateRaceResultRequest(
+// POST /courses/{courseId}/races
+data class StartRaceRequest(
     /** Null for a race over the whole course. */
     val moduleId: String? = null,
-    val finishMs: Int,
+    /** How many questions the race needs. The server deals at most `application.race.max-questions`. */
+    val questionCount: Int
+)
+
+data class DealtQuestion(
+    /** The question number, from 0; the same as its position in the list. */
+    val seq: Int,
+    val questionId: String,
+    val moduleId: String,
+    val content: String,
+    /** At most four, in the order to show. */
+    val options: List<String>
+)
+
+data class StartRaceResponse(
+    val raceId: String,
+    val seed: Long,
+    val questions: List<DealtQuestion>
+)
+
+// POST /courses/{courseId}/races/{raceId}/answers
+data class AnswerRequest(
+    @param:JsonProperty(required = true)
+    val seq: Int,
+    /** The shown option pressed, from 0; null when the countdown ran out. */
+    val choice: Int? = null
+)
+
+data class AnswerResponse(
+    val seq: Int,
+    val correct: Boolean,
     val correctCount: Int,
-    val wrongCount: Int,
-    val seed: Long
+    val wrongCount: Int
+)
+
+// POST /courses/{courseId}/races/{raceId}/finish
+data class FinishRaceRequest(
+    val finishMs: Int
 )
 
 data class RaceResultResponse(
@@ -44,7 +83,13 @@ data class RaceResultResponse(
     val correctCount: Int,
     val wrongCount: Int,
     val seed: Long,
-    val createdAt: Long
+    val createdAt: Long,
+    /**
+     * One entry per question number of the race: the right shown option for the first `MAX_SHOWN_KEYS`
+     * questions judged wrong, a timeout included, and null for every other number. Sent only by a
+     * successful finish.
+     */
+    val answerKey: List<Int?>
 )
 
 data class LeaderboardRow(

@@ -14,7 +14,9 @@ import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.security.authentication.InsufficientAuthenticationException
+import org.springframework.web.HttpRequestMethodNotSupportedException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.bind.support.WebExchangeBindException
@@ -22,6 +24,8 @@ import org.springframework.web.reactive.function.client.WebClientException
 import org.springframework.web.reactive.function.client.WebClientRequestException
 import org.springframework.web.reactive.function.client.WebClientResponseException
 import org.springframework.web.server.ResponseStatusException
+import org.springframework.web.servlet.NoHandlerFoundException
+import org.springframework.web.servlet.resource.NoResourceFoundException
 import java.time.Instant
 import java.util.*
 
@@ -250,6 +254,40 @@ class GlobalExceptionHandler {
     }
 
     /**
+     * A request body that cannot be read: empty, not JSON, a missing required field, text where a
+     * number belongs, or a number out of range. What failed goes to the log; the person is asked to
+     * reload, since the page sent something it should not have.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException::class)
+    fun handleHttpMessageNotReadableException(
+        ex: HttpMessageNotReadableException, request: HttpServletRequest
+    ): ResponseEntity<ErrorResp> {
+        logger.error("Unreadable body on {} {}: {}", request.method, request.servletPath, ex.message)
+        val resp: ErrorResp = buildErrorResp(request, HttpStatus.BAD_REQUEST)
+        resp.addError(GenericError(UNREADABLE_REQUEST))
+        return ResponseEntity(resp, HttpStatus.BAD_REQUEST)
+    }
+
+    /** No route at this path: `NoResourceFoundException` in the app, `NoHandlerFoundException` without static resources. */
+    @ExceptionHandler(NoResourceFoundException::class, NoHandlerFoundException::class)
+    fun handleNoRouteException(ex: Exception, request: HttpServletRequest): ResponseEntity<ErrorResp> {
+        logger.error("No route for {} {}", request.method, request.servletPath)
+        val resp: ErrorResp = buildErrorResp(request, HttpStatus.NOT_FOUND)
+        resp.addError(GenericError(NO_ROUTE))
+        return ResponseEntity(resp, HttpStatus.NOT_FOUND)
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException::class)
+    fun handleMethodNotSupportedException(
+        ex: HttpRequestMethodNotSupportedException, request: HttpServletRequest
+    ): ResponseEntity<ErrorResp> {
+        logger.error("Method {} not allowed on {}", request.method, request.servletPath)
+        val resp: ErrorResp = buildErrorResp(request, HttpStatus.METHOD_NOT_ALLOWED)
+        resp.addError(GenericError(METHOD_NOT_ALLOWED))
+        return ResponseEntity(resp, HttpStatus.METHOD_NOT_ALLOWED)
+    }
+
+    /**
      * Process all unexpected errors. The exception, its cause chain and the stack go to the log under
      * the request id; the client gets one sentence a person can read.
      *
@@ -325,6 +363,9 @@ class GlobalExceptionHandler {
     companion object {
         /** What a client is told when the server itself failed. The detail is in the log, never on the wire. */
         const val UNEXPECTED_ERROR = "Something went wrong on our side. Please try again."
+        const val UNREADABLE_REQUEST = "The request could not be read. Reload the page and try again."
+        const val NO_ROUTE = "There is nothing at this address."
+        const val METHOD_NOT_ALLOWED = "This address does not accept that kind of request."
 
         /** Unique, foreign key and exclusion violations: the SQLStates that mean two writes collided. */
         private val COLLISION_SQL_STATES = setOf("23505", "23503", "23P01")

@@ -50,6 +50,8 @@ data class RaceQuestion(
     @Column(name = "deleted_at")
     var deletedAt: Long? = null
 ) {
+    fun optionTexts(): List<String> = options.map { it["text"]?.toString() ?: "" }
+
     @PreUpdate
     fun preUpdate() {
         updatedAt = Instant.now().toEpochMilli()

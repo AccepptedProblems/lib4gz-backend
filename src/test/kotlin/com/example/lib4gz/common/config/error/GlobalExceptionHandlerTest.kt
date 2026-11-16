@@ -14,6 +14,7 @@ import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.security.authentication.InsufficientAuthenticationException
 import org.springframework.web.reactive.function.client.WebClientRequestException
 import org.springframework.web.server.ResponseStatusException
+import org.springframework.web.servlet.resource.NoResourceFoundException
 import java.net.ConnectException
 import java.sql.SQLException
 import java.net.URI
@@ -138,6 +139,14 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.BAD_REQUEST, response.statusCode)
         assertEquals("Invalid code", reasonOf(response.body!!))
+    }
+
+    @Test
+    fun `a path with no route in the app is a 404, not a 500`() {
+        val response = handler.handleNoRouteException(NoResourceFoundException(HttpMethod.POST, "v1/nowhere"), request)
+
+        assertEquals(HttpStatus.NOT_FOUND, response.statusCode)
+        assertEquals(GlobalExceptionHandler.NO_ROUTE, reasonOf(response.body!!))
     }
 
     private fun reasonOf(resp: ErrorResp) = (resp.errors.single() as GenericError).reason
