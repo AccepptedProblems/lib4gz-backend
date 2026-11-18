@@ -48,7 +48,7 @@ application:
   security:
     jwt:
       secret-key: ${JWT_SECRET_KEY}
-      expiration: 86400000 # a day
+      expiration: 3600000 # an hour
     # Opaque refresh tokens (auth/service/RefreshTokenService.kt). Every refresh starts a new 30 days.
     refresh-token:
       ttl-ms: 2592000000          # 30 days

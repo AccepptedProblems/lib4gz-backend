@@ -26,6 +26,6 @@ Owns: who may reach an endpoint, and how the caller's identity gets to a control
 
 - `authorizedEndpoints` is empty: every role check is in service code.
 - CORS allows every origin.
-- An access token lasts one day. The refresh token is opaque, not a JWT, and owned by
+- An access token lasts one hour. The refresh token is opaque, not a JWT, and owned by
   `auth/`; `JwtProvider` only makes access tokens.
 - With `GOOGLE_CLIENT_ID` unset, every Google token is rejected with 401.
