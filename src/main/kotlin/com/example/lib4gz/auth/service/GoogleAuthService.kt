@@ -48,6 +48,7 @@ class GoogleAuthServiceImpl(
     private val pendingRepo: PendingRegistrationRepo,
     private val verifier: GoogleTokenVerifier,
     private val jwtProvider: JwtProvider,
+    private val refreshTokenService: RefreshTokenService,
     private val transactionTemplate: TransactionTemplate,
     private val notifierService: NotifierService,
     @Value("\${application.registration.pending-ttl-ms}") private val pendingTtlMs: Long
@@ -138,5 +139,6 @@ class GoogleAuthServiceImpl(
         }
     }
 
-    private fun login(user: User) = LoginResponse(user.toResponse(), jwtProvider.generateAccessToken(user))
+    private fun login(user: User) =
+        LoginResponse(user.toResponse(), jwtProvider.generateAccessToken(user), refreshTokenService.issue(user.id))
 }

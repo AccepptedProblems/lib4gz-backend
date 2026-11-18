@@ -38,7 +38,8 @@ class GoogleAuthServiceImplTest {
         userRepo = userRepo,
         pendingRepo = pendingRepo,
         verifier = verifier,
-        jwtProvider = JwtProvider(TEST_JWT_SECRET, 60_000, 60_000),
+        jwtProvider = JwtProvider(TEST_JWT_SECRET, 60_000),
+        refreshTokenService = fakeRefreshTokenService(),
         transactionTemplate = passThroughTransactionTemplate(),
         notifierService = notifierService,
         pendingTtlMs = 900_000
@@ -87,6 +88,7 @@ class GoogleAuthServiceImplTest {
             val response = service.signIn("token").block()!!
 
             assertEquals("usr_alice", response.login!!.user.id)
+            assertEquals("refresh-usr_alice", response.login!!.refreshToken.token)
             assertNull(response.registration)
         }
 

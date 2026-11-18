@@ -1,5 +1,6 @@
 package com.example.lib4gz
 
+import com.example.lib4gz.auth.job.RefreshTokenCleanupJob
 import com.example.lib4gz.auth.job.RegistrationCleanupJob
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
@@ -36,9 +37,12 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean
 )
 class Lib4gzApplicationTests {
 
-	// The real job sweeps at startup: it would open a connection and delete expired rows in that database.
+	// The real jobs sweep at startup: they would open a connection and delete expired rows in that database.
 	@MockitoBean
 	private lateinit var registrationCleanupJob: RegistrationCleanupJob
+
+	@MockitoBean
+	private lateinit var refreshTokenCleanupJob: RefreshTokenCleanupJob
 
 	@Test
 	fun contextLoads() {

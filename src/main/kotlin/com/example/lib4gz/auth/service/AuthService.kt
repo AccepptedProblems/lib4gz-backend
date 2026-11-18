@@ -20,7 +20,8 @@ interface AuthService {
 class AuthServiceImpl(
     private val userRepo: UserRepo,
     private val passwordEncoder: PasswordEncoder,
-    private val jwtProvider: JwtProvider
+    private val jwtProvider: JwtProvider,
+    private val refreshTokenService: RefreshTokenService
 ): AuthService {
     override fun auth(loginReq: LoginReq): Mono<LoginResponse> {
         return Mono.fromCallable {
@@ -33,7 +34,8 @@ class AuthServiceImpl(
 
             LoginResponse(
                 user = user.toResponse(),
-                accessToken = jwtProvider.generateAccessToken(user)
+                accessToken = jwtProvider.generateAccessToken(user),
+                refreshToken = refreshTokenService.issue(user.id)
             )
         }.subscribeOn(Schedulers.boundedElastic())
     }

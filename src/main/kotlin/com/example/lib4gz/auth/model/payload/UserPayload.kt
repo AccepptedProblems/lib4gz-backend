@@ -44,5 +44,11 @@ data class Token (
 
 data class LoginResponse(
     val user: UserResponse,
-    val accessToken: Token
+    val accessToken: Token,
+    /** Opaque; trade it at `/v1/auth/refresh-token` for a new pair. Single use. */
+    val refreshToken: Token
+)
+
+data class RefreshTokenRequest(
+    val refreshToken: String
 )

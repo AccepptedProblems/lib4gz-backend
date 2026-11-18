@@ -25,9 +25,9 @@ have their own `CLAUDE.md`.
 - An unhandled exception never reaches the wire. It is logged under the request id.
 - The frontend reads the text from `errors[0].reason`, or `errors[0].message` for an
   input-format error. Keep that shape.
-- A context test (`@SpringBootTest`) must mock `RegistrationCleanupJob` with `@MockitoBean`.
-  The real job sweeps at startup and would delete expired rows in whatever database `.env`
-  names.
+- A context test (`@SpringBootTest`) must mock `RegistrationCleanupJob` and
+  `RefreshTokenCleanupJob` with `@MockitoBean`. The real jobs sweep at startup and would
+  delete rows in whatever database `.env` names.
 - A new entity id is `IdGenerator.generate("<prefix>")` as the default of the `id` field,
   with one prefix per entity. Freshness resolution relies on ids being unique across
   entity types.

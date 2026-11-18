@@ -1,5 +1,6 @@
 package com.example.lib4gz.auth.service
 
+import com.example.lib4gz.auth.model.payload.Token
 import org.mockito.ArgumentMatchers
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
@@ -15,6 +16,13 @@ const val TEST_JWT_SECRET = "404E635266556A586E3272357F4428472B4B6250645367566B5
 fun <T> anyValue(): T {
     ArgumentMatchers.any<T>()
     return null as T
+}
+
+/** A RefreshTokenService whose `issue` returns `refresh-<userId>` without storing anything. */
+fun fakeRefreshTokenService(): RefreshTokenService {
+    val service = mock(RefreshTokenService::class.java)
+    `when`(service.issue(ArgumentMatchers.anyString())).thenAnswer { Token("refresh-${it.arguments[0]}", Long.MAX_VALUE) }
+    return service
 }
 
 /** A TransactionTemplate whose `execute` simply runs the callback, so services run without a database. */

@@ -49,8 +49,11 @@ application:
     jwt:
       secret-key: ${JWT_SECRET_KEY}
       expiration: 86400000 # a day
-      refresh-token:
-        expiration: 604800000 # 7 days
+    # Opaque refresh tokens (auth/service/RefreshTokenService.kt). Every refresh starts a new 30 days.
+    refresh-token:
+      ttl-ms: 2592000000          # 30 days
+      reuse-grace-ms: 10000       # a token rotated this recently may be presented again (two tabs racing)
+      revoked-retention-ms: 604800000   # 7 days: a reused token is recognised only while its row exists
     google:
       # OAuth Web client id (public). Google ID tokens must carry it as their audience.
       client-id: ${GOOGLE_CLIENT_ID:}

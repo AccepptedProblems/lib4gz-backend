@@ -18,8 +18,8 @@ class AuthServiceImplTest {
 
     private val userRepo = mock(UserRepo::class.java)
     private val passwordEncoder = BCryptPasswordEncoder(4)
-    private val jwtProvider = JwtProvider(TEST_JWT_SECRET, 60_000, 60_000)
-    private val service = AuthServiceImpl(userRepo, passwordEncoder, jwtProvider)
+    private val jwtProvider = JwtProvider(TEST_JWT_SECRET, 60_000)
+    private val service = AuthServiceImpl(userRepo, passwordEncoder, jwtProvider, fakeRefreshTokenService())
 
     private val alice = User(
         id = "usr_alice",
@@ -38,6 +38,7 @@ class AuthServiceImplTest {
         assertEquals("usr_alice", response.user.id)
         assertEquals("Alice", response.user.name)
         assertEquals(false, response.user.emailVerified)
+        assertEquals("refresh-usr_alice", response.refreshToken.token)
     }
 
     @Test

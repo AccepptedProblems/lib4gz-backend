@@ -1,6 +1,7 @@
 package com.example.lib4gz.race.service
 
 import com.example.lib4gz.MigrationCheckGuard
+import com.example.lib4gz.auth.job.RefreshTokenCleanupJob
 import com.example.lib4gz.auth.job.RegistrationCleanupJob
 import com.example.lib4gz.auth.repo.UserRepo
 import com.example.lib4gz.common.exception.BadRequestException
@@ -50,6 +51,9 @@ class RaceDatabaseTest {
 
     @MockitoBean
     private lateinit var registrationCleanupJob: RegistrationCleanupJob
+
+    @MockitoBean
+    private lateinit var refreshTokenCleanupJob: RefreshTokenCleanupJob
 
     @Autowired private lateinit var raceService: RaceService
     @Autowired private lateinit var raceRepo: RaceRepo

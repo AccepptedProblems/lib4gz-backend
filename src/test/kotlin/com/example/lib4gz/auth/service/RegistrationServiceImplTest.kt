@@ -46,7 +46,8 @@ class RegistrationServiceImplTest {
         otpService = otpService,
         notifierService = notifierService,
         passwordEncoder = passwordEncoder,
-        jwtProvider = JwtProvider(TEST_JWT_SECRET, 60_000, 60_000),
+        jwtProvider = JwtProvider(TEST_JWT_SECRET, 60_000),
+        refreshTokenService = fakeRefreshTokenService(),
         transactionTemplate = passThroughTransactionTemplate(),
         pendingTtlMs = 900_000,
         resendCooldownMs = 60_000
@@ -146,6 +147,7 @@ class RegistrationServiceImplTest {
         verify(pendingRepo).delete(pending)
         assertEquals(user.id, response.user.id)
         assertTrue(response.accessToken.token.isNotBlank())
+        assertEquals("refresh-${user.id}", response.refreshToken.token)
     }
 
     @Test

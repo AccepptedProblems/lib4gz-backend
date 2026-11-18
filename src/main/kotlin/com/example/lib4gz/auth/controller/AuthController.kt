@@ -6,14 +6,17 @@ import com.example.lib4gz.auth.model.payload.GoogleSignInResponse
 import com.example.lib4gz.auth.model.payload.LoginReq
 import com.example.lib4gz.auth.model.payload.LoginResponse
 import com.example.lib4gz.auth.model.payload.OtpSentResponse
+import com.example.lib4gz.auth.model.payload.RefreshTokenRequest
 import com.example.lib4gz.auth.model.payload.RegistrationStartedResponse
 import com.example.lib4gz.auth.model.payload.StartEmailRegistrationRequest
 import com.example.lib4gz.auth.model.payload.UserResponse
 import com.example.lib4gz.auth.model.payload.VerifyEmailRegistrationRequest
 import com.example.lib4gz.auth.service.AuthService
 import com.example.lib4gz.auth.service.GoogleAuthService
+import com.example.lib4gz.auth.service.RefreshTokenService
 import com.example.lib4gz.auth.service.RegistrationService
 import com.example.lib4gz.common.config.common.PZRequestHeader
+import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.*
 import reactor.core.publisher.Mono
 
@@ -22,7 +25,8 @@ import reactor.core.publisher.Mono
 class AuthController(
     private val authService: AuthService,
     private val registrationService: RegistrationService,
-    private val googleAuthService: GoogleAuthService
+    private val googleAuthService: GoogleAuthService,
+    private val refreshTokenService: RefreshTokenService
 ) {
     @PostMapping("/login")
     fun login(@RequestBody loginReq: LoginReq): Mono<LoginResponse> {
@@ -59,8 +63,16 @@ class AuthController(
         return registrationService.complete(request)
     }
 
+    /** Public, so it works with an expired access token. Single use: the response carries the next refresh token. */
     @PostMapping("/refresh-token")
-    fun refreshToken() {
+    fun refreshToken(@RequestBody request: RefreshTokenRequest): Mono<LoginResponse> {
+        return refreshTokenService.refresh(request.refreshToken)
+    }
 
+    /** Public, so a browser whose access token has expired can still sign out. */
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun logout(@RequestBody request: RefreshTokenRequest): Mono<Void> {
+        return refreshTokenService.logout(request.refreshToken)
     }
 }

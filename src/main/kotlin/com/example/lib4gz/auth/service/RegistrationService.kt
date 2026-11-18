@@ -47,6 +47,7 @@ class RegistrationServiceImpl(
     private val notifierService: NotifierService,
     private val passwordEncoder: PasswordEncoder,
     private val jwtProvider: JwtProvider,
+    private val refreshTokenService: RefreshTokenService,
     private val transactionTemplate: TransactionTemplate,
     @Value("\${application.registration.pending-ttl-ms}") private val pendingTtlMs: Long,
     @Value("\${application.otp.resend-cooldown-ms}") private val resendCooldownMs: Long
@@ -126,7 +127,7 @@ class RegistrationServiceImpl(
                     )
                 )
                 pendingRepo.delete(pending)
-                LoginResponse(user.toResponse(), jwtProvider.generateAccessToken(user))
+                LoginResponse(user.toResponse(), jwtProvider.generateAccessToken(user), refreshTokenService.issue(user.id))
             }!!
         }.subscribeOn(Schedulers.boundedElastic())
     }

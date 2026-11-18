@@ -17,7 +17,6 @@ import javax.crypto.SecretKey
 @Component
 class JwtProvider(
     @Value("\${application.security.jwt.secret-key}") private val secretKey: String,
-    @Value("\${application.security.jwt.refresh-token.expiration}") private val refreshExpiration: Long,
     @Value("\${application.security.jwt.expiration}") private val tokenExpiration: Long,
 ) {
     private fun getSigningKey(): SecretKey {
@@ -55,10 +54,6 @@ class JwtProvider(
             token = doGenerateToken(claims, user.username, tokenExpiration),
             expiredAt = Instant.now().toEpochMilli() + tokenExpiration
         )
-    }
-
-    fun generateRefreshToken(user: User): String {
-        return doGenerateToken(HashMap(), user.username, refreshExpiration)
     }
 
     private fun doGenerateToken(claims: Map<String, Any>, subject: String, expiration: Long): String {

@@ -21,8 +21,8 @@ entity and its table differ.
   migration to it at startup.
 - `./gradlew test` touches no database, so it does not check a migration.
 - The check below refuses to migrate unless the datasource Spring resolved is on localhost or
-  127.0.0.1 (`MigrationCheckGuard.kt`). It also runs `race/service/RaceDatabaseTest.kt`, which
-  writes rows.
+  127.0.0.1 (`MigrationCheckGuard.kt`). It also runs `race/service/RaceDatabaseTest.kt` and
+  `auth/service/RefreshTokenDatabaseTest.kt`, which write rows.
 - The check below proves the entities match the tables. It does not prove a changed check
   constraint: read that one by eye.
 - Every unique constraint on Supabase carries a Hibernate-generated name (`uk...`), not the

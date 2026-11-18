@@ -1,5 +1,6 @@
 package com.example.lib4gz.common.config
 
+import com.example.lib4gz.auth.job.RefreshTokenCleanupJob
 import com.example.lib4gz.auth.job.RegistrationCleanupJob
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.assertj.core.api.Assertions.assertThat
@@ -31,9 +32,12 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
 @AutoConfigureMockMvc
 class OpenApiDocumentTest {
 
-    // The real job sweeps at startup: it would open a connection and delete expired rows in that database.
+    // The real jobs sweep at startup: they would open a connection and delete expired rows in that database.
     @MockitoBean
     private lateinit var registrationCleanupJob: RegistrationCleanupJob
+
+    @MockitoBean
+    private lateinit var refreshTokenCleanupJob: RefreshTokenCleanupJob
 
     @Autowired
     private lateinit var mockMvc: MockMvc

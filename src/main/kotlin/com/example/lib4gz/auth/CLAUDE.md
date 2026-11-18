@@ -29,14 +29,31 @@ Entry points: `service/RegistrationService.kt`, `service/GoogleAuthService.kt`,
 - The username is the JWT subject and is immutable.
 - A new public route here must be added to `src/main/resources/security.json`.
   `google:connect` is deliberately not public: it changes the caller's own account.
+  Refresh and logout are public, so they work with an expired access token.
+- Every sign-in response carries a refresh token from `RefreshTokenService.issue`. The token
+  is a random value, not a JWT. Only its SHA-256 hex is stored; never store or log the raw value.
+- In `RefreshTokenService.refresh`, `RefreshTokenRepo.claim` is the first statement: it is the
+  guard against two refreshes using one token. Nothing reads the row before it.
+- The theft response (`deleteAllForUser`) deletes every refresh token of the user; it never
+  marks them revoked. It must commit, so its 401 is thrown after
+  `transactionTemplate.execute` returns, never inside it.
+- `RefreshTokenService.logout` runs the theft response too, when its token matches no live row
+  and was rotated by a refresh longer ago than the reuse grace and is unexpired. It uses the
+  same grace boundary as `refresh`. It never throws, so the delete commits and the answer
+  is 204.
+- A refresh 401 is `ResponseStatusException(UNAUTHORIZED)`. `UnauthorizedException` maps to
+  403, and the frontend signs out only on a 401 from refresh.
 
 ## Gotchas
 
 - `email_otps` and `pending_registrations` are hard-deleted. `job/RegistrationCleanupJob.kt`
   removes expired rows every ten minutes.
+- `refresh_tokens` is hard-deleted, by the theft response and by
+  `job/RefreshTokenCleanupJob.kt`. The job removes, once a day, rows
+  that expired or were revoked over seven days ago. A reused token is caught as theft only
+  while its row exists, so a shorter retention catches less.
 - `users` is soft-deleted on delete but has no `@Where` filter, and nothing deletes a user
   today.
-- `POST /v1/auth/refresh-token` is an empty stub.
 - Granting the teacher role is admin-only (`UserService.grantTeacherRole`). Nothing in the
   app creates an admin; that is done in the database by hand.
 
